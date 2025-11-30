@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { CheckCircle, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { ScanStatus, InventoryRecord } from '../types';
 
