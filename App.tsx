@@ -5,7 +5,7 @@ import StatusFeedback from './components/StatusFeedback';
 import HistoryList from './components/HistoryList';
 import StockStatus from './components/StockStatus';
 import AdminDashboard from './components/AdminDashboard';
-import ScanResultOverlay from './components/ScanResultOverlay'; // Import new component
+import ScanResultOverlay from './components/ScanResultOverlay';
 import { InventoryRecord, ScanStatus, MasterItem } from './types';
 import { db } from './utils/db';
 
@@ -26,14 +26,16 @@ const playSound = (type: 'success' | 'error' | 'warning') => {
   gain.connect(ctx.destination);
 
   if (type === 'success') {
+    // Pleasant high pitch beep
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime); 
-    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); 
+    osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); // Quick chirp
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.1);
   } else if (type === 'warning') {
+    // Double beep for duplicate
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(440, ctx.currentTime);
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
@@ -53,6 +55,7 @@ const playSound = (type: 'success' | 'error' | 'warning') => {
     }, 150);
 
   } else {
+    // Low pitch error buzz
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(150, ctx.currentTime);
     gain.gain.setValueAtTime(0.5, ctx.currentTime);
@@ -61,6 +64,7 @@ const playSound = (type: 'success' | 'error' | 'warning') => {
     osc.stop(ctx.currentTime + 0.3);
   }
 
+  // Cleanup AudioContext after sound finishes to prevent resource leaks
   setTimeout(() => {
     if (ctx.state !== 'closed') {
       ctx.close();
@@ -135,12 +139,14 @@ function App() {
             return;
         }
         
+        // Use optimized DB search
         const matched = await db.searchMasterItems(manualInput);
+        
         setSuggestions(matched);
         setShowSuggestions(matched.length > 0);
     };
 
-    const timer = setTimeout(fetchSuggestions, 300); 
+    const timer = setTimeout(fetchSuggestions, 300); // Debounce
     return () => clearTimeout(timer);
   }, [manualInput]);
 
@@ -185,7 +191,7 @@ function App() {
       setShowOverlay(true);
 
       playSound('warning');
-      if (navigator.vibrate) navigator.vibrate(200); 
+      if (navigator.vibrate) navigator.vibrate(200); // Short double buzz for warning
       return; 
     }
     
@@ -222,10 +228,10 @@ function App() {
 
     if (status === 'OK') {
         playSound('success');
-        if (navigator.vibrate) navigator.vibrate(50);
+        if (navigator.vibrate) navigator.vibrate(50); // Short crisp buzz for success
     } else {
         playSound('error');
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Long buzz pattern for error
     }
     
     // Clear manual input state
@@ -327,7 +333,7 @@ function App() {
   const handleLock = () => {
       setIsAuthenticated(false);
       localStorage.removeItem('zen_auth');
-      setHasSelectedUser(false); 
+      setHasSelectedUser(false); // Also reset user selection
       setPasswordInput('');
   };
 
