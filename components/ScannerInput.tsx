@@ -75,9 +75,14 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       const config = {
         fps: 10,
-        // Reduced qrbox size slightly to ensure it fits on smaller screens
-        qrbox: { width: 220, height: 220 },
-        // IMPORTANT: Removed aspectRatio constraint to fix black screen on mobile
+        // DYNAMIC QRBOX: Fixes black screen on mobile by ensuring box is never larger than video feed
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            return {
+                width: Math.floor(minEdge * 0.7), // 70% of the screen width
+                height: Math.floor(minEdge * 0.7)
+            };
+        },
         formatsToSupport: [ 
             Html5QrcodeSupportedFormats.QR_CODE, 
             Html5QrcodeSupportedFormats.CODE_128, 
@@ -85,12 +90,17 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         ]
       };
 
+      // Explicit constraints to help some Android devices pick the right camera
+      const constraints = { 
+        facingMode: "environment",
+        width: { min: 640, ideal: 1280, max: 1920 },
+        height: { min: 480, ideal: 720, max: 1080 },
+      };
+
       await qrCode.start(
-        { facingMode: "environment" },
+        constraints,
         config,
         (decodedText) => {
-           // Continuous scanning: We just report the scan and keep running
-           // Use ref to ensure we always call the latest version of onScan
            if (isMountedRef.current) {
              const now = Date.now();
              // Cooldown Check: exact same code within 1.5s? Ignore it.
@@ -194,8 +204,8 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
     <div className="fixed inset-0 z-50 bg-stone-900 flex flex-col items-center justify-center">
       <div className="relative w-full max-w-md bg-black h-full flex flex-col justify-center">
         {/* Scanner Container */}
-        {/* Ensure container takes full width and has height */}
-        <div id={scannerRegionId} className="w-full h-auto overflow-hidden bg-black" />
+        {/* Removed bg-black to debug black screen, ensure flex grow */}
+        <div id={scannerRegionId} className="w-full flex-1 overflow-hidden" style={{ minHeight: '300px' }} />
         
         {/* Controls */}
         <div className="absolute top-4 right-4 flex gap-4 z-10">
