@@ -82,7 +82,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       const config = {
         fps: 10,
-        // Using a dynamic box ensures it fits on screen but doesn't constrain video feed aspect ratio
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
             return {
@@ -90,13 +89,22 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
                 height: Math.floor(minEdge * 0.7)
             };
         },
-        // IMPORTANT: Removed aspectRatio to prevent digital zoom/cropping
         formatsToSupport: [ 
             Html5QrcodeSupportedFormats.QR_CODE, 
             Html5QrcodeSupportedFormats.CODE_128, 
             Html5QrcodeSupportedFormats.EAN_13 
         ]
       };
+
+      // Explicitly ask for 4:3 or higher resolution to prevent some browsers from picking a cropped 'square' mode
+      // which acts like a zoom.
+      if (typeof cameraIdOrConfig !== 'string' && !cameraIdOrConfig.deviceId) {
+          cameraIdOrConfig = {
+              facingMode: "environment",
+              width: { ideal: 1280 }, // Asking for higher res encourages wide lens
+              height: { ideal: 720 }
+          };
+      }
 
       if (!isMountedRef.current || currentRequestId !== requestIdRef.current) return;
 
@@ -117,18 +125,23 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         () => {}
       );
 
-      // Attempt to force zoom to 1x (Min Zoom)
+      // Smart Zoom Reset
       if (isMountedRef.current) {
          try {
-             const caps = qrCode.getRunningTrackCameraCapabilities();
-             // Check if zoom is supported
-             if ((caps as any).zoom) {
+             const track = qrCode.getRunningTrackCameraCapabilities() as MediaTrackCapabilities;
+             const settings = qrCode.getRunningTrackSettings() as MediaTrackSettings;
+             
+             // Check if zoom is supported and reset to minimum
+             // @ts-ignore
+             if (track && track.zoom) {
+                 // @ts-ignore
+                 const minZoom = track.zoom.min || 1;
                  await qrCode.applyVideoConstraints({
-                     advanced: [{ zoom: 1 }] // Attempt to set 1x zoom
+                     advanced: [{ zoom: minZoom }] 
                  } as any);
              }
          } catch(e) {
-             console.log("Zoom reset not supported", e);
+             console.log("Zoom reset not supported on this device", e);
          }
       }
 
