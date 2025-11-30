@@ -1,69 +1,287 @@
-import React, { useEffect } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { ScanStatus, InventoryRecord } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
+import { Flashlight, FlashlightOff, XCircle, RefreshCw } from 'lucide-react';
 
-interface ScanResultOverlayProps {
-  status: ScanStatus | 'IDLE';
-  record?: InventoryRecord;
-  visible: boolean;
+interface ScannerInputProps {
+  onScan: (decodedText: string) => void;
+  isScanning: boolean;
+  setIsScanning: (scanning: boolean) => void;
 }
 
-const ScanResultOverlay: React.FC<ScanResultOverlayProps> = ({ status, record, visible }) => {
-  if (!visible || status === 'IDLE') return null;
+const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsScanning }) => {
+  const scannerRegionId = 'html5qr-code-full-region';
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false); 
+  
+  // Anti-jitter
+  const lastScannedCodeRef = useRef<string | null>(null);
+  const lastScannedTimeRef = useRef<number>(0);
+  const COOLDOWN_MS = 1500; 
 
-  let bgColor = "bg-white";
-  let icon = <CheckCircle size={64} />;
-  let title = "";
-  let message = "";
-  let textColor = "text-stone-800";
+  const onScanRef = useRef(onScan);
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
-  switch (status) {
-    case 'OK':
-      bgColor = "bg-emerald-500/95";
-      icon = <CheckCircle2 size={80} className="text-white drop-shadow-md" />;
-      title = "掃描成功";
-      message = record?.PartID || "";
-      textColor = "text-white";
-      break;
-    case 'Checked':
-      bgColor = "bg-blue-500/95";
-      icon = <CheckCircle size={80} className="text-white drop-shadow-md" />;
-      title = "已確認";
-      message = record?.PartID || "";
-      textColor = "text-white";
-      break;
-    case 'Not Found':
-      bgColor = "bg-red-500/95";
-      icon = <XCircle size={80} className="text-white drop-shadow-md" />;
-      title = "查無資料";
-      message = "此物料不在清單中";
-      textColor = "text-white";
-      break;
-    case 'Duplicated':
-      bgColor = "bg-amber-500/95";
-      icon = <AlertTriangle size={80} className="text-white drop-shadow-md" />;
-      title = "重複盤點";
-      message = "此條碼已掃描過";
-      textColor = "text-white";
-      break;
-  }
+  const isMountedRef = useRef(true);
+  const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (html5QrCodeRef.current) {
+        try { html5QrCodeRef.current.stop(); } catch(e) {}
+        try { html5QrCodeRef.current.clear(); } catch(e) {}
+      }
+    };
+  }, []);
+
+  const startScannerOperation = async (currentRequestId: number) => {
+    if (!isMountedRef.current) return;
+    setIsInitializing(true);
+    setCameraError(null);
+
+    await new Promise(r => setTimeout(r, 100));
+    if (!document.getElementById(scannerRegionId)) {
+        return;
+    }
+
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+        await html5QrCodeRef.current.clear();
+      } catch (e) { /* ignore */ }
+    }
+
+    try {
+      const qrCode = new Html5Qrcode(scannerRegionId);
+      html5QrCodeRef.current = qrCode;
+
+      // Camera Selection Strategy:
+      // 1. Try to find explicit back camera (avoid telephoto if labeled)
+      // 2. Fallback to facingMode environment
+      let cameraIdOrConfig: any = { facingMode: "environment" };
+      try {
+          const devices = await Html5Qrcode.getCameras();
+          if (devices && devices.length > 0) {
+              // Prefer 'back' or 'environment'. 
+              // Some phones have multiple back cameras (wide, ultra-wide, telephoto).
+              // Usually the first 'back' one is the main wide lens.
+              const backCameras = devices.filter(d => 
+                  d.label.toLowerCase().includes('back') || 
+                  d.label.toLowerCase().includes('rear') || 
+                  d.label.toLowerCase().includes('environment')
+              );
+              
+              if (backCameras.length > 0) {
+                  // Pick the first found back camera (usually main)
+                  cameraIdOrConfig = { deviceId: { exact: backCameras[0].id } };
+              } else {
+                  // If no label matches, assume last camera is back
+                  cameraIdOrConfig = { deviceId: { exact: devices[devices.length - 1].id } };
+              }
+          }
+      } catch (e) {
+          console.warn("Could not enumerate cameras", e);
+      }
+
+      const config = {
+        fps: 10,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            return {
+                width: Math.floor(minEdge * 0.65), // Slightly smaller box to force user to center
+                height: Math.floor(minEdge * 0.65)
+            };
+        },
+        formatsToSupport: [ 
+            Html5QrcodeSupportedFormats.QR_CODE, 
+            Html5QrcodeSupportedFormats.CODE_128, 
+            Html5QrcodeSupportedFormats.EAN_13 
+        ]
+      };
+
+      // ZOOM FIX: 
+      // Most native camera sensors are 4:3 (e.g. 640x480, 1280x960).
+      // Requesting 1280x720 (16:9) often causes the phone to CROP the sensor (zoom in).
+      // Requesting 1280x960 (4:3) usually gives the full Wide field of view.
+      if (typeof cameraIdOrConfig !== 'string' && !cameraIdOrConfig.deviceId) {
+          cameraIdOrConfig = {
+              facingMode: "environment",
+              width: { ideal: 1280 }, 
+              height: { ideal: 960 } // Request 4:3 aspect ratio to minimize cropping/zoom
+          };
+      }
+
+      if (!isMountedRef.current || currentRequestId !== requestIdRef.current) return;
+
+      await qrCode.start(
+        cameraIdOrConfig,
+        config,
+        (decodedText) => {
+           if (isMountedRef.current) {
+             const now = Date.now();
+             if (decodedText === lastScannedCodeRef.current && (now - lastScannedTimeRef.current < COOLDOWN_MS)) {
+                return;
+             }
+             lastScannedCodeRef.current = decodedText;
+             lastScannedTimeRef.current = now;
+             onScanRef.current(decodedText);
+           }
+        },
+        () => {}
+      );
+
+      // Explicitly Reset Zoom to 1.0
+      if (isMountedRef.current) {
+         try {
+             // @ts-ignore
+             const track = qrCode.getRunningTrackCameraCapabilities();
+             // @ts-ignore
+             if (track && track.zoom) {
+                 await qrCode.applyVideoConstraints({
+                     // @ts-ignore
+                     advanced: [{ zoom: track.zoom.min || 1.0 }] 
+                 } as any);
+             }
+         } catch(e) {
+             console.log("Zoom reset not supported", e);
+         }
+         
+         // Re-check torch availability after constraints applied
+         try {
+            setHasTorch(true);
+         } catch(e) {}
+      }
+
+      setIsInitializing(false);
+
+    } catch (err: any) {
+      console.error("Scanner Start Error", err);
+      setIsInitializing(false);
+      
+      if (isMountedRef.current && currentRequestId === requestIdRef.current) {
+        let msg = "未知錯誤";
+        if (typeof err === 'string') msg = err;
+        if (err?.name) msg = `${err.name}: ${err.message}`;
+        setCameraError(`無法啟動相機。\n${msg}\n請確認：\n1. 使用 HTTPS 連線 (iOS 限制)\n2. 已允許瀏覽器相機權限\n3. 嘗試重新整理頁面`);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isScanning) {
+      requestIdRef.current++;
+      startScannerOperation(requestIdRef.current);
+    } else {
+      const stop = async () => {
+          if (html5QrCodeRef.current) {
+              try {
+                  if (html5QrCodeRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
+                      await html5QrCodeRef.current.stop();
+                  }
+                  html5QrCodeRef.current.clear();
+              } catch(e) {}
+          }
+      };
+      stop();
+    }
+  }, [isScanning]);
+
+  const toggleTorch = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.applyVideoConstraints({
+          advanced: [{ torch: !torchOn }]
+        } as any);
+        setTorchOn(!torchOn);
+      } catch (err) {
+        setHasTorch(false);
+      }
+    }
+  };
+
+  const handleRetry = () => {
+     requestIdRef.current++;
+     startScannerOperation(requestIdRef.current);
+  };
+
+  if (!isScanning) return null;
 
   return (
-    <div className={`absolute inset-0 z-40 flex items-center justify-center pointer-events-none animate-in fade-in zoom-in duration-200`}>
-      <div className={`${bgColor} backdrop-blur-sm w-4/5 max-w-sm p-8 rounded-3xl shadow-2xl flex flex-col items-center justify-center text-center space-y-4`}>
-        <div className="animate-bounce-short">
-          {icon}
+    <div className="fixed inset-0 z-50 bg-stone-900 flex flex-col items-center justify-center">
+      <div className="relative w-full max-w-md bg-black h-full flex flex-col justify-center">
+        
+        {/* Scanner Container */}
+        <div className="w-full flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+            {isInitializing && !cameraError && (
+                <div className="absolute text-white z-10 flex flex-col items-center gap-2">
+                    <RefreshCw className="animate-spin" />
+                    <span className="text-xs">啟動相機中...</span>
+                </div>
+            )}
+            <div id={scannerRegionId} className="w-full h-full" />
         </div>
-        <div>
-          <h2 className={`text-3xl font-bold ${textColor} tracking-tight mb-2`}>{title}</h2>
-          <p className={`text-xl font-mono opacity-90 ${textColor} break-all`}>{message}</p>
-          {record?.Description && status === 'OK' && (
-             <p className={`text-sm mt-2 opacity-80 ${textColor} line-clamp-2`}>{record.Description}</p>
+        
+        {/* Controls */}
+        <div className="absolute top-4 right-4 flex gap-4 z-20">
+          {hasTorch && !cameraError && (
+            <button 
+              onClick={toggleTorch}
+              className="p-3 bg-stone-800/80 rounded-full text-amber-400 backdrop-blur-sm border border-stone-700 active:scale-95 transition-transform"
+            >
+              {torchOn ? <FlashlightOff size={24} /> : <Flashlight size={24} />}
+            </button>
           )}
+          <button 
+            onClick={() => setIsScanning(false)}
+            className="p-3 bg-stone-800/80 rounded-full text-stone-200 backdrop-blur-sm border border-stone-700 active:scale-95 transition-transform"
+          >
+            <XCircle size={24} />
+          </button>
+        </div>
+
+        {/* Visual Guide Overlay */}
+        {!cameraError && !isInitializing && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+                <div className="w-[220px] h-[220px] border-2 border-amber-500/50 rounded-lg relative">
+                    <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-500 rounded-tl-sm"></div>
+                    <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-500 rounded-tr-sm"></div>
+                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-500 rounded-bl-sm"></div>
+                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-amber-500 rounded-br-sm"></div>
+                    <div className="absolute left-2 right-2 h-0.5 bg-amber-400/80 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-scan top-1/2"></div>
+                </div>
+            </div>
+        )}
+        
+        <div className="absolute bottom-12 left-0 right-0 text-center z-20">
+            <p className="text-stone-300 text-sm font-medium tracking-wide bg-black/30 py-1 backdrop-blur-sm">
+                請將條碼對準框框中心
+            </p>
         </div>
       </div>
+      
+      {cameraError && (
+         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4/5 p-4 bg-red-900/90 text-white rounded-xl text-center backdrop-blur-sm animate-in fade-in flex flex-col items-center gap-3 z-50 shadow-2xl border border-red-700">
+           <div>
+             <p className="font-bold mb-2 text-lg">相機啟動失敗</p>
+             <p className="text-xs whitespace-pre-line leading-relaxed opacity-90 text-left bg-black/20 p-2 rounded max-h-40 overflow-y-auto">{cameraError}</p>
+           </div>
+           <button 
+             onClick={handleRetry}
+             className="mt-2 px-6 py-2 bg-white text-red-900 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-stone-100 active:scale-95 transition-all shadow-md"
+           >
+             <RefreshCw size={14} />
+             重試
+           </button>
+         </div>
+      )}
     </div>
   );
 };
 
-export default ScanResultOverlay;
+export default ScannerInput;
