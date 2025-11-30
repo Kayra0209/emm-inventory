@@ -1,0 +1,7 @@
+{
+  "name": "EMM 盤點系統",
+  "description": "A minimalist, offline-first warehouse inventory system with Japanese earth-tone aesthetics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
