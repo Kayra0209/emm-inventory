@@ -67,8 +67,9 @@
         width: 100% !important;
         height: 100% !important;
       }
+      /* Changed to 'contain' to show FULL sensor view without cropping/zooming */
       #html5qr-code-full-region video {
-        object-fit: cover !important;
+        object-fit: contain !important; 
         width: 100% !important;
         height: 100% !important;
         border-radius: 0.75rem; 
