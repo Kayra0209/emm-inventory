@@ -90,11 +90,11 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         ]
       };
 
-      // Explicit constraints to help some Android devices pick the right camera
+      // SIMPLIFIED CONSTRAINTS: 
+      // Removing width/height constraints is crucial for iOS stability.
+      // iOS Safari often throws OverconstrainedError if we ask for specific resolutions it doesn't support perfectly.
       const constraints = { 
-        facingMode: "environment",
-        width: { min: 640, ideal: 1280, max: 1920 },
-        height: { min: 480, ideal: 720, max: 1080 },
+        facingMode: "environment"
       };
 
       await qrCode.start(
@@ -126,10 +126,20 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
            if (cameras && cameras.length > 0) setHasTorch(true);
          } catch(e) { /* ignore */ }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error starting scanner", err);
       if (isMountedRef.current && currentRequestId === requestIdRef.current) {
-        setCameraError("無法啟動相機。請確認：\n1. 已允許相機權限\n2. 使用 HTTPS 連線 (iOS 限制)\n3. 嘗試重新整理頁面");
+        // Show the actual error message for better debugging
+        let detailedMsg = err?.message || err || "未知錯誤";
+        if (err?.name === 'NotAllowedError') {
+            detailedMsg = "存取被拒 (NotAllowedError)。\n請到設定允許相機權限。";
+        } else if (err?.name === 'NotFoundError') {
+            detailedMsg = "找不到相機裝置 (NotFoundError)。";
+        } else if (err?.name === 'NotReadableError') {
+            detailedMsg = "相機硬體無法存取 (NotReadableError)。\n可能被其他 App 佔用，請重開機。";
+        }
+
+        setCameraError(`無法啟動相機。\n\n錯誤代碼: ${detailedMsg}\n\n請確認：\n1. 使用 HTTPS 連線 (iOS 限制)\n2. 已允許瀏覽器相機權限\n3. 嘗試重新整理頁面`);
       }
     }
   };
@@ -204,7 +214,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
     <div className="fixed inset-0 z-50 bg-stone-900 flex flex-col items-center justify-center">
       <div className="relative w-full max-w-md bg-black h-full flex flex-col justify-center">
         {/* Scanner Container */}
-        {/* Removed bg-black to debug black screen, ensure flex grow */}
+        {/* Ensure container takes full width and has height */}
         <div id={scannerRegionId} className="w-full flex-1 overflow-hidden" style={{ minHeight: '300px' }} />
         
         {/* Controls */}
@@ -249,7 +259,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4/5 p-4 bg-red-900/90 text-white rounded-xl text-center backdrop-blur-sm animate-in fade-in flex flex-col items-center gap-3 z-50 shadow-2xl border border-red-700">
            <div>
              <p className="font-bold mb-2 text-lg">相機啟動失敗</p>
-             <p className="text-sm whitespace-pre-line leading-relaxed opacity-90">{cameraError}</p>
+             <p className="text-xs whitespace-pre-line leading-relaxed opacity-90 text-left bg-black/20 p-2 rounded">{cameraError}</p>
            </div>
            <button 
              onClick={handleRetry}
