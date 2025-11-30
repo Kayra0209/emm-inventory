@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Scan, List, BarChart3, Settings, User, ArrowRight, X, Download, Lock } from 'lucide-react';
+import { Scan, List, BarChart3, Settings, User, ArrowRight, X, Download, Lock, Eye, EyeOff } from 'lucide-react';
 import ScannerInput from './components/ScannerInput';
 import StatusFeedback from './components/StatusFeedback';
 import HistoryList from './components/HistoryList';
 import StockStatus from './components/StockStatus';
 import AdminDashboard from './components/AdminDashboard';
+import ScanResultOverlay from './components/ScanResultOverlay'; // Import new component
 import { InventoryRecord, ScanStatus, MasterItem } from './types';
 import { db } from './utils/db';
 
@@ -25,16 +26,14 @@ const playSound = (type: 'success' | 'error' | 'warning') => {
   gain.connect(ctx.destination);
 
   if (type === 'success') {
-    // Pleasant high pitch beep
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); // Quick chirp
+    osc.frequency.setValueAtTime(880, ctx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); 
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.1);
   } else if (type === 'warning') {
-    // Double beep for duplicate
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(440, ctx.currentTime);
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
@@ -54,7 +53,6 @@ const playSound = (type: 'success' | 'error' | 'warning') => {
     }, 150);
 
   } else {
-    // Low pitch error buzz
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(150, ctx.currentTime);
     gain.gain.setValueAtTime(0.5, ctx.currentTime);
@@ -63,7 +61,6 @@ const playSound = (type: 'success' | 'error' | 'warning') => {
     osc.stop(ctx.currentTime + 0.3);
   }
 
-  // Cleanup AudioContext after sound finishes to prevent resource leaks
   setTimeout(() => {
     if (ctx.state !== 'closed') {
       ctx.close();
@@ -73,17 +70,22 @@ const playSound = (type: 'success' | 'error' | 'warning') => {
 
 function App() {
   // --- Auth State ---
-  // Changed to localStorage for persistence across sessions
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
       return localStorage.getItem('zen_auth') === 'true';
   });
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // UI State
   const [currentView, setCurrentView] = useState<View>('SCAN');
   const [isScanning, setIsScanning] = useState(false);
   const [hasSelectedUser, setHasSelectedUser] = useState(false); 
+  
+  // Overlay State
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [overlayRecord, setOverlayRecord] = useState<InventoryRecord | undefined>(undefined);
+  const [overlayStatus, setOverlayStatus] = useState<ScanStatus | 'IDLE'>('IDLE');
   
   // User Management
   const [users, setUsers] = useState<string[]>(() => {
@@ -133,14 +135,12 @@ function App() {
             return;
         }
         
-        // Use optimized DB search
         const matched = await db.searchMasterItems(manualInput);
-        
         setSuggestions(matched);
         setShowSuggestions(matched.length > 0);
     };
 
-    const timer = setTimeout(fetchSuggestions, 300); // Debounce
+    const timer = setTimeout(fetchSuggestions, 300); 
     return () => clearTimeout(timer);
   }, [manualInput]);
 
@@ -152,6 +152,17 @@ function App() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
+
+  // Scan Overlay Timer
+  useEffect(() => {
+    let timer: any;
+    if (showOverlay) {
+      timer = setTimeout(() => {
+        setShowOverlay(false);
+      }, 1500); // Overlay shows for 1.5 seconds
+    }
+    return () => clearTimeout(timer);
+  }, [showOverlay]);
 
   const handleUserSelect = (user: string) => {
     setCurrentUser(user);
@@ -167,22 +178,20 @@ function App() {
     if (existingRecord) {
       setLastScanStatus('Duplicated');
       setLastRecord(existingRecord);
+      
+      // Trigger Overlay
+      setOverlayStatus('Duplicated');
+      setOverlayRecord(existingRecord);
+      setShowOverlay(true);
+
       playSound('warning');
-      if (navigator.vibrate) navigator.vibrate(200); // Short double buzz for warning
+      if (navigator.vibrate) navigator.vibrate(200); 
       return; 
     }
     
     // 2. Query Master DB
     const masterItem = await db.findItem(partId);
     const status: ScanStatus = masterItem ? 'OK' : 'Not Found';
-    
-    if (status === 'OK') {
-        playSound('success');
-        if (navigator.vibrate) navigator.vibrate(50); // Short crisp buzz for success
-    } else {
-        playSound('error');
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Long buzz pattern for error
-    }
     
     // Create new record snapshotting master data
     const newRecord: InventoryRecord = {
@@ -206,6 +215,19 @@ function App() {
     setLastRecord(newRecord);
     setLastScanStatus(status);
     
+    // Trigger Overlay
+    setOverlayStatus(status);
+    setOverlayRecord(newRecord);
+    setShowOverlay(true);
+
+    if (status === 'OK') {
+        playSound('success');
+        if (navigator.vibrate) navigator.vibrate(50);
+    } else {
+        playSound('error');
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    }
+    
     // Clear manual input state
     setManualInput('');
     setShowSuggestions(false);
@@ -221,7 +243,6 @@ function App() {
       handleScan(partId);
   };
 
-  // New handler to switch view when user clicks "View Related"
   const handleViewRelated = () => {
     setCurrentView('LIST');
   };
@@ -230,7 +251,6 @@ function App() {
     setRecords(prev => prev.filter(r => !ids.includes(r.id)));
   };
 
-  // Quick Delete Handler
   const handleDeleteSingle = (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
       if(window.confirm('確定要刪除此筆掃描紀錄嗎？')) {
@@ -252,7 +272,6 @@ function App() {
     setLastRecord(undefined);
   };
 
-  // --- Export Logic ---
   const downloadCSV = (content: string, fileName: string) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -266,7 +285,6 @@ function App() {
 
   const handleExportScanned = () => {
     const BOM = "\uFEFF";
-    // Header includes ScanStatus and InvStatus
     const header = "盤點日期,PartID,Vendor S/N,Project,Class,Location,ScanStatus,InvStatus,Vendor,Vendor P/N,Customer P/N,Description,User\n";
     let csvContent = BOM + header;
     
@@ -299,6 +317,7 @@ function App() {
           setIsAuthenticated(true);
           localStorage.setItem('zen_auth', 'true'); // Persist login
           setAuthError(false);
+          setPasswordInput('');
       } else {
           setAuthError(true);
           setPasswordInput('');
@@ -308,7 +327,8 @@ function App() {
   const handleLock = () => {
       setIsAuthenticated(false);
       localStorage.removeItem('zen_auth');
-      setHasSelectedUser(false); // Also reset user selection
+      setHasSelectedUser(false); 
+      setPasswordInput('');
   };
 
   // --- Password Protection Screen ---
@@ -322,15 +342,24 @@ function App() {
             <p className="text-stone-400 text-xs mb-8">請輸入存取密碼以繼續</p>
             
             <form onSubmit={handleLogin} className="w-full max-w-xs space-y-4">
-                <input 
-                    type="password" 
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full bg-stone-700 border border-stone-600 rounded-xl px-4 py-3 text-center text-lg tracking-widest focus:outline-none focus:border-amber-500 transition-colors"
-                    placeholder="••••"
-                    inputMode="numeric"
-                    maxLength={8}
-                />
+                <div className="relative">
+                    <input 
+                        type={showPassword ? "text" : "password"} 
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        className="w-full bg-stone-700 border border-stone-600 rounded-xl px-4 py-3 pr-12 text-center text-lg tracking-widest focus:outline-none focus:border-amber-500 transition-colors"
+                        placeholder="••••"
+                        inputMode="numeric"
+                        maxLength={8}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-stone-400 hover:text-stone-200 transition-colors"
+                    >
+                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                </div>
                 {authError && <p className="text-red-400 text-xs text-center">密碼錯誤</p>}
                 <button 
                     type="submit"
@@ -351,7 +380,6 @@ function App() {
              <div className="w-20 h-20 bg-stone-800 rounded-3xl mx-auto mb-6 flex items-center justify-center shadow-xl shadow-stone-200">
                 <div className="w-4 h-4 bg-amber-500 rounded-full animate-bounce-short"></div>
              </div>
-             {/* Adjusted to text-lg */}
              <h1 className="text-lg font-bold text-stone-800 tracking-tight mb-2">EMM 盤點系統</h1>
              <p className="text-stone-400 text-sm">請選擇您的使用者名稱以開始</p>
           </div>
@@ -381,7 +409,6 @@ function App() {
       
       {/* Header */}
       <header className="bg-stone-800 text-stone-50 p-3 shadow-md z-20 flex justify-between items-center">
-        {/* Adjusted font to text-sm */}
         <h1 className="font-bold text-sm tracking-wide flex items-center gap-2">
           <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
           EMM盤點系統
@@ -397,9 +424,15 @@ function App() {
         <div className="h-full overflow-y-auto p-4 pb-24 no-scrollbar">
           
           {currentView === 'SCAN' && (
-            <div className="flex flex-col h-full gap-4">
+            <div className="flex flex-col h-full gap-4 relative">
               
-              {/* Export Button in Scan Interface */}
+              {/* Scan Overlay inserted here */}
+              <ScanResultOverlay 
+                 status={overlayStatus} 
+                 record={overlayRecord} 
+                 visible={showOverlay} 
+              />
+
               <div className="flex justify-end -mb-2 z-10">
                 <button 
                   onClick={handleExportScanned}
@@ -413,7 +446,7 @@ function App() {
               <StatusFeedback 
                 status={lastScanStatus} 
                 lastRecord={lastRecord} 
-                onViewRelated={handleViewRelated} // Pass the callback
+                onViewRelated={handleViewRelated} 
               />
               
               <div className="flex-1 flex flex-col items-center justify-center min-h-[250px]">
@@ -425,7 +458,6 @@ function App() {
                   <span className="text-stone-200 font-medium text-xs">啟動掃描</span>
                 </button>
 
-                {/* Manual Input Form with Autocomplete */}
                 <form onSubmit={handleManualSubmit} className="w-full max-w-xs px-2 relative z-10">
                   <div className="relative flex items-center group">
                     <input 
@@ -444,7 +476,6 @@ function App() {
                     </button>
                   </div>
 
-                  {/* Suggestions Dropdown */}
                   {showSuggestions && (
                       <div className="absolute w-full mt-2 bg-white rounded-xl shadow-xl border border-stone-100 overflow-hidden z-20 max-h-60 overflow-y-auto">
                           {suggestions.map(item => (
@@ -468,7 +499,6 @@ function App() {
                 </form>
               </div>
 
-              {/* Recent Records */}
               <div className="mt-auto bg-white rounded-xl px-4 py-3 shadow-sm border border-stone-100 opacity-90">
                 <div className="flex justify-between items-center mb-2">
                    <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">最近紀錄</h4>
@@ -488,7 +518,6 @@ function App() {
                             r.Status === 'Duplicated' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
                             }`}>{r.Status}</span>
                             
-                            {/* Quick Delete Button */}
                             <button 
                                 onClick={(e) => handleDeleteSingle(r.id, e)}
                                 className="p-1 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
