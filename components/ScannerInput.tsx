@@ -75,8 +75,9 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
+        // Reduced qrbox size slightly to ensure it fits on smaller screens
+        qrbox: { width: 220, height: 220 },
+        // IMPORTANT: Removed aspectRatio constraint to fix black screen on mobile
         formatsToSupport: [ 
             Html5QrcodeSupportedFormats.QR_CODE, 
             Html5QrcodeSupportedFormats.CODE_128, 
@@ -118,7 +119,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
     } catch (err) {
       console.error("Error starting scanner", err);
       if (isMountedRef.current && currentRequestId === requestIdRef.current) {
-        setCameraError("無法啟動相機。請檢查相機權限，或嘗試重新整理頁面。");
+        setCameraError("無法啟動相機。請確認：\n1. 已允許相機權限\n2. 使用 HTTPS 連線 (iOS 限制)\n3. 嘗試重新整理頁面");
       }
     }
   };
@@ -191,9 +192,10 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
   return (
     <div className="fixed inset-0 z-50 bg-stone-900 flex flex-col items-center justify-center">
-      <div className="relative w-full max-w-md bg-black">
+      <div className="relative w-full max-w-md bg-black h-full flex flex-col justify-center">
         {/* Scanner Container */}
-        <div id={scannerRegionId} className="w-full h-auto overflow-hidden rounded-xl bg-black min-h-[300px]" />
+        {/* Ensure container takes full width and has height */}
+        <div id={scannerRegionId} className="w-full h-auto overflow-hidden bg-black" />
         
         {/* Controls */}
         <div className="absolute top-4 right-4 flex gap-4 z-10">
@@ -215,7 +217,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
         {/* Custom Earth-tone Visual Guide Overlay */}
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-             <div className="w-[250px] h-[250px] border-2 border-amber-500/50 rounded-lg relative">
+             <div className="w-[220px] h-[220px] border-2 border-amber-500/50 rounded-lg relative">
                  <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-500 rounded-tl-sm"></div>
                  <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-500 rounded-tr-sm"></div>
                  <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-500 rounded-bl-sm"></div>
@@ -225,27 +227,29 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
                  <div className="absolute left-2 right-2 h-0.5 bg-amber-400/80 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-scan top-1/2"></div>
              </div>
         </div>
+        
+        <div className="absolute bottom-12 left-0 right-0 text-center">
+            <p className="text-stone-300 text-sm font-medium tracking-wide bg-black/30 py-1 backdrop-blur-sm">
+                請將條碼對準框框中心
+            </p>
+        </div>
       </div>
       
       {cameraError && (
-         <div className="mt-4 p-4 bg-red-900/80 text-white rounded-xl mx-4 text-center backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 flex flex-col items-center gap-3">
+         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4/5 p-4 bg-red-900/90 text-white rounded-xl text-center backdrop-blur-sm animate-in fade-in flex flex-col items-center gap-3 z-50 shadow-2xl border border-red-700">
            <div>
-             <p className="font-bold mb-1">相機錯誤</p>
-             <p className="text-sm">{cameraError}</p>
+             <p className="font-bold mb-2 text-lg">相機啟動失敗</p>
+             <p className="text-sm whitespace-pre-line leading-relaxed opacity-90">{cameraError}</p>
            </div>
            <button 
              onClick={handleRetry}
-             className="px-4 py-2 bg-stone-100 text-stone-900 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-white active:scale-95 transition-all"
+             className="mt-2 px-6 py-2 bg-white text-red-900 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-stone-100 active:scale-95 transition-all shadow-md"
            >
              <RefreshCw size={14} />
              重試
            </button>
          </div>
       )}
-
-      <div className="mt-6 text-stone-300 text-sm font-medium tracking-wide">
-        請將 PartID 條碼對準框框中心
-      </div>
     </div>
   );
 };
