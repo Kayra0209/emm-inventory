@@ -38,7 +38,7 @@ const splitCSV = (str: string) => {
     });
 }
 
-// Robust file reader with encoding detection
+// Robust file reader with encoding detection (UTF-8 / Big5 / UTF-16)
 const readFileAsText = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -46,8 +46,8 @@ const readFileAsText = (file: File): Promise<string> => {
       const buffer = e.target?.result as ArrayBuffer;
       const view = new DataView(buffer);
       
-      // 1. Detect BOM
-      let encoding = 'utf-8'; // Default
+      // 1. Detect BOM for Unicode
+      let encoding = 'utf-8'; // Default fallback
       let offset = 0;
 
       if (buffer.byteLength >= 3 && view.getUint8(0) === 0xEF && view.getUint8(1) === 0xBB && view.getUint8(2) === 0xBF) {
@@ -67,7 +67,7 @@ const readFileAsText = (file: File): Promise<string> => {
            resolve(text);
            return;
         } catch (e) {
-           // If strict UTF-8 fails, assume Big5 (Traditional Chinese Excel)
+           // If strict UTF-8 fails, assume Big5 (Traditional Chinese Excel standard)
            encoding = 'big5';
         }
       }
@@ -134,10 +134,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         const cols = splitCSV(line);
         
         if (cols.length >= 1 && cols[0]) {
-          // Reconstruct description if it was split
-          // The CSV format: PartID, VendorSN, Project, Class, Location, Vendor, VendorPN, CustomerPN, Description...
-          // Index 8 starts Description.
-          const description = cols.slice(8).join(',').trim();
+          // Robust Description handling: Join all remaining columns in case of extra commas
+          // CSV format: PartID(0), VendorSN(1), Project(2), Class(3), Location(4), Vendor(5), VendorPN(6), CustomerPN(7), Description(8...)
+          const description = cols.length > 8 ? cols.slice(8).join(',').trim() : (cols[8] || '');
 
           currentChunk.push({
             PartID: cols[0],
@@ -148,7 +147,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
             Vendor: cols[5] || '',
             VendorPN: cols[6] || '',
             CustomerPN: cols[7] || '',
-            Description: description || '' 
+            Description: description
           });
         }
 
@@ -178,7 +177,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
     } catch (err) {
       console.error(err);
       setImporting(false);
-      setStatusMsg('匯入失敗：檔案編碼錯誤，請確認檔案為 CSV 格式。');
+      setStatusMsg('匯入失敗：檔案編碼錯誤或格式不符。');
     }
     
     e.target.value = '';
@@ -210,6 +209,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         if (!line) continue;
 
         const cols = splitCSV(line);
+        // Export CSV format: 盤點日期(0), PartID(1), ... Description(11), User(12)
         const partID = cols[1];
 
         if (partID && !currentPartIds.has(partID)) {
@@ -538,7 +538,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
               </button>
           </div>
           <p className="text-[10px] text-stone-400 mt-2 text-center">
-             主檔匯入格式: PartID, Vendor S/N, Project, Class, Location, Vendor, Vendor P/N, Customer P/N, Description
+             支援編碼: UTF-8, Big5 (Excel), UTF-16
           </p>
         </div>
       </div>
