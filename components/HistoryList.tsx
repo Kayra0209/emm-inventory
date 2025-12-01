@@ -239,7 +239,8 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
                 <>
                   <div className="bg-stone-800 text-stone-50 p-4 rounded-xl shadow-md mb-4">
                      <h4 className="text-[10px] text-stone-400 mb-1 uppercase tracking-wider">當前比對品項</h4>
-                     <p className="font-bold text-sm line-clamp-2">{lastRecord.Description}</p>
+                     {/* Show Full Description */}
+                     <p className="font-bold text-sm leading-relaxed">{lastRecord.Description}</p>
                      <div className="flex justify-between items-end mt-2">
                         {relatedLoading ? (
                           <span className="text-xs">比對中...</span>
@@ -262,25 +263,23 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
                      relatedItems.map((item) => {
                        const isScanned = scannedPartIds.has(item.PartID);
                        return (
-                         <div key={item.PartID} className={`p-4 rounded-xl border flex justify-between items-center ${
+                         <div key={item.PartID} className={`p-4 rounded-xl border flex justify-between items-start ${
                             isScanned ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-stone-200'
                          }`}>
-                            <div>
-                               <div className="flex items-center gap-2">
+                            <div className="flex-1 min-w-0">
+                               <div className="flex items-center gap-2 mb-1">
                                   <span className="font-mono font-bold text-stone-800 text-sm">{item.PartID}</span>
                                   {isScanned ? (
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full flex items-center gap-1">
+                                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full flex items-center gap-1 shrink-0">
                                       <Check size={10} /> 已盤
                                     </span>
                                   ) : (
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded-full">未盤</span>
+                                    <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded-full shrink-0">未盤</span>
                                   )}
                                </div>
-                               <div className="text-xs text-stone-500 mt-1">
-                                  {item.Location && <span>Loc: {item.Location} • </span>}
-                                  {item.Vendor && <span>{item.Vendor}</span>}
-                               </div>
-                               <div className="text-[10px] text-stone-400 mt-0.5 truncate max-w-[200px]">
+                               {/* Removed Location display */}
+                               {/* Full Description without truncate */}
+                               <div className="text-[10px] text-stone-600 mt-1 leading-relaxed">
                                  {item.Description}
                                </div>
                             </div>
@@ -361,12 +360,13 @@ const HistoryItem = ({ record, isSelectionMode, isSelected, onToggle, onLongPres
           <div className="flex items-center gap-2">
              {/* Adjusted to text-base from text-lg */}
              <h3 className="font-mono font-bold text-stone-800 truncate text-base">{record.PartID}</h3>
-             {record.Status === 'Not Found' && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full">未建檔</span>}
-             {record.Status === 'Duplicated' && <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">重複</span>}
-             {record.Status === 'Checked' && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">已確認</span>}
+             {record.Status === 'Not Found' && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full shrink-0">未建檔</span>}
+             {record.Status === 'Duplicated' && <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full shrink-0">重複</span>}
+             {record.Status === 'Checked' && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full shrink-0">已確認</span>}
           </div>
-          <p className="text-stone-500 text-xs truncate mt-0.5">{record.Description || '未知品項'}</p>
-          <div className="flex gap-3 mt-1 text-[10px] text-stone-400">
+          {/* Show Full Description, No Truncate, Removed Location */}
+          <p className="text-stone-600 text-xs mt-1 leading-relaxed">{record.Description || '未知品項'}</p>
+          <div className="flex gap-3 mt-1.5 text-[10px] text-stone-400">
             <span>{new Date(record.InventoryDate).toLocaleString()}</span>
             <span>{record.scannedBy}</span>
           </div>
