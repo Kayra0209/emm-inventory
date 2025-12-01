@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { ScanStatus, InventoryRecord } from '../types';
 
@@ -48,8 +48,9 @@ const ScanResultOverlay: React.FC<ScanResultOverlayProps> = ({ status, record, v
       break;
   }
 
+  // Increased Z-index to z-[60] to appear above ScannerInput (z-50)
   return (
-    <div className={`absolute inset-0 z-40 flex items-center justify-center pointer-events-none animate-in fade-in zoom-in duration-200`}>
+    <div className={`absolute inset-0 z-[60] flex items-center justify-center pointer-events-none animate-in fade-in zoom-in duration-200`}>
       <div className={`${bgColor} backdrop-blur-sm w-4/5 max-w-sm p-8 rounded-3xl shadow-2xl flex flex-col items-center justify-center text-center space-y-4`}>
         <div className="animate-bounce-short">
           {icon}
