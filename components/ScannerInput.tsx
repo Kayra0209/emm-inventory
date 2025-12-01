@@ -19,7 +19,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
   // Anti-jitter: Track last scanned code and time
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
-  // Reduced to 1000ms for snappier continuous scanning feel
   const COOLDOWN_MS = 1000; 
 
   const onScanRef = useRef(onScan);
@@ -62,18 +61,16 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       const qrCode = new Html5Qrcode(scannerRegionId);
       html5QrCodeRef.current = qrCode;
 
-      // --- CONFIGURATION ---
-      // Requesting High Resolution 4:3 to support both wide angle and detailed 1D barcodes
+      // --- CONFIGURATION FIX ---
+      // The library throws an error if we pass width/height/advanced here.
+      // We must pass ONLY { facingMode: "environment" }.
       const cameraIdOrConfig = {
-          facingMode: "environment",
-          width: { min: 1280, ideal: 1920, max: 3840 },
-          height: { min: 720, ideal: 1080, max: 2160 },
-          advanced: [{ focusMode: "continuous" }]
+          facingMode: "environment"
       };
 
       const config = {
         fps: 15, 
-        // 90% scan box to fit long barcodes
+        // 90% scan box to fit long Code-39 barcodes
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
             return {
@@ -95,9 +92,8 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       if (!isMountedRef.current || currentRequestId !== requestIdRef.current) return;
 
-      // Fix TypeScript error by casting to any
       await qrCode.start(
-        cameraIdOrConfig as any,
+        cameraIdOrConfig,
         config,
         (decodedText) => {
            if (isMountedRef.current) {
@@ -114,7 +110,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         () => {}
       );
 
-      // Attempt to reset zoom to 1.0 explicitly
+      // Attempt to reset zoom to 1.0 explicitly (if supported)
       if (isMountedRef.current) {
          try {
              // @ts-ignore
