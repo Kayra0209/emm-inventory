@@ -67,6 +67,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       const config = {
         fps: 15, 
+        // 90% scan box to fit long Code-39 barcodes
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
             return {

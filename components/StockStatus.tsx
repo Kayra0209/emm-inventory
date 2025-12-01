@@ -38,7 +38,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       let total = 0;
       allItems.forEach(item => {
         total++;
-        // CHANGED: Use PartID prefix instead of Project field
+        // Categorize logic based on PartID prefix
         const partId = (item.PartID || '').trim().toUpperCase();
         
         if (partId.startsWith('A26')) counts['A26']++;
@@ -62,7 +62,6 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       // Checked items also count as completed
       if (r.Status === 'OK' || r.Status === 'Checked') {
         totalScanned++;
-        // CHANGED: Use PartID prefix instead of Project field
         const partId = (r.PartID || '').trim().toUpperCase();
         
         if (partId.startsWith('A26')) counts['A26']++;
@@ -262,7 +261,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                          <p className="text-[10px] text-stone-600 line-clamp-2 mb-2 leading-relaxed">{item.Description}</p>
                          <div className="flex flex-wrap gap-2 text-[9px] text-stone-400">
                             <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">{item.Project}</span>
-                            <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 font-medium text-stone-600">{item.Class}</span>
+                            {item.Class && <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 font-medium text-stone-600">{item.Class}</span>}
                             <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">{item.Vendor}</span>
                             {item.VendorPN && item.VendorPN !== 'NA' && (
                                 <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 font-mono">{item.VendorPN}</span>

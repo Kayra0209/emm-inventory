@@ -46,8 +46,8 @@ const readFileAsText = (file: File): Promise<string> => {
       const buffer = e.target?.result as ArrayBuffer;
       const view = new DataView(buffer);
       
-      // 1. Detect BOM for Unicode
-      let encoding = 'utf-8'; // Default fallback
+      // 1. Detect BOM
+      let encoding = 'utf-8'; 
       let offset = 0;
 
       if (buffer.byteLength >= 3 && view.getUint8(0) === 0xEF && view.getUint8(1) === 0xBB && view.getUint8(2) === 0xBF) {
@@ -67,14 +67,13 @@ const readFileAsText = (file: File): Promise<string> => {
            resolve(text);
            return;
         } catch (e) {
-           // If strict UTF-8 fails, assume Big5 (Traditional Chinese Excel standard)
+           // If strict UTF-8 fails, assume Big5 (Traditional Chinese Excel)
            encoding = 'big5';
         }
       }
 
       try {
         const decoder = new TextDecoder(encoding);
-        // Slice buffer to skip BOM if present
         const text = decoder.decode(buffer.slice(offset));
         resolve(text);
       } catch (err) {
@@ -91,7 +90,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
   const mergeInputRef = useRef<HTMLInputElement>(null);
   const restoreInputRef = useRef<HTMLInputElement>(null);
   
-  // State
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusMsg, setStatusMsg] = useState('');
@@ -99,12 +97,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
   const [newUser, setNewUser] = useState('');
   const [isProcessingReport, setIsProcessingReport] = useState(false);
 
-  // Check DB Count
   useEffect(() => {
     db.masterItems.count().then(count => setItemCount(count));
   }, [importing]);
 
-  // --- Logic 1: Master Data Import ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -125,7 +121,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
       
       const chunks = [];
       let currentChunk: MasterItem[] = [];
-      let startIndex = 1; // Skip header
+      let startIndex = 1; 
 
       for (let i = startIndex; i < totalLines; i++) {
         const line = lines[i].trim();
@@ -134,8 +130,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         const cols = splitCSV(line);
         
         if (cols.length >= 1 && cols[0]) {
-          // Reconstruct description if it was split
-          // The CSV format: PartID(0), VendorSN(1), Project(2), Class(3), Location(4), Vendor(5), VendorPN(6), CustomerPN(7), Description(8...)
+          // Reconstruct description if it was split by extra commas
+          // CSV Format: PartID(0), ..., CustomerPN(7), Description(8...)
           const description = cols.length > 8 ? cols.slice(8).join(',').trim() : (cols[8] || '');
 
           currentChunk.push({
@@ -177,13 +173,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
     } catch (err) {
       console.error(err);
       setImporting(false);
-      setStatusMsg('匯入失敗：檔案編碼錯誤或格式不符。');
+      setStatusMsg('匯入失敗：檔案編碼錯誤');
     }
     
     e.target.value = '';
   };
 
-  // --- Logic 2: Merge External CSV ---
   const handleMergeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -196,7 +191,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
     try {
       const text = await readFileAsText(file);
       const lines = text.split(/\r\n|\n/);
-      // Determine start index based on header content
       const startIndex = lines[0].startsWith('\uFEFF') || lines[0].includes('盤點日期') ? 1 : 0;
       
       const newRecords: InventoryRecord[] = [];
@@ -209,7 +203,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         if (!line) continue;
 
         const cols = splitCSV(line);
-        // Export CSV format: 盤點日期(0), PartID(1), ... Description(11), User(12)
         const partID = cols[1];
 
         if (partID && !currentPartIds.has(partID)) {
@@ -219,6 +212,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
              const parsed = Date.parse(dateStr);
              if (!isNaN(parsed)) timestamp = parsed;
           }
+
+          const description = cols.length > 11 ? cols.slice(11, -1).join(',').trim() : (cols[11] || '');
 
           newRecords.push({
             id: Math.random().toString(36).substr(2, 9),
@@ -232,8 +227,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
             Vendor: cols[8] || '',
             VendorPN: cols[9] || '',
             CustomerPN: cols[10] || '',
-            Description: cols[11] || '',
-            scannedBy: cols[12] || 'Imported'
+            Description: description,
+            scannedBy: cols[cols.length - 1] || 'Imported'
           });
           
           currentPartIds.add(partID);
@@ -254,7 +249,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
     e.target.value = '';
   };
 
-  // --- Logic 6: System Backup & Restore (JSON) ---
   const handleBackupSystem = async () => {
     setIsProcessingReport(true);
     try {
@@ -312,7 +306,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
      e.target.value = '';
   };
 
-  // --- Helper: CSV Downloader ---
   const downloadCSV = (content: string, fileName: string) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -324,7 +317,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
     document.body.removeChild(link);
   };
 
-  // --- Logic 4: Export FULL Report ---
   const handleExportFullReport = async () => {
     setIsProcessingReport(true);
     const BOM = "\uFEFF";
@@ -377,7 +369,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         }
       });
 
-      // Handle extra items (scanned but not in master)
       scannedMap.forEach(record => {
         const dateStr = new Date(record.InventoryDate).toLocaleString('zh-TW', { hour12: false }).replace(',', '');
         const row = [
@@ -408,7 +399,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
     }
   };
 
-  // --- Logic 5: Export Unscanned Only ---
   const handleExportUnscanned = async () => {
     setIsProcessingReport(true);
     const BOM = "\uFEFF";
@@ -464,23 +454,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
 
   return (
     <div className="space-y-6">
-      
-      {/* --- Section: Master Data & Merge --- */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-100">
         <div className="flex justify-between items-center mb-4">
            <h3 className="text-base font-bold text-stone-800 flex items-center gap-2">
              <Database size={18} className="text-stone-600" />
              資料庫與合併
            </h3>
-           
-           {/* Lock Button */}
-           <button 
-             onClick={onLock}
-             className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-amber-600 transition-colors border border-stone-200 rounded-lg px-2 py-1"
-           >
-             <Lock size={12} />
-             鎖定系統
-           </button>
+           <button onClick={onLock} className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-amber-600 transition-colors border border-stone-200 rounded-lg px-2 py-1"><Lock size={12} /> 鎖定系統</button>
         </div>
         
         <div className="flex items-center justify-between mb-4 p-3 bg-stone-50 rounded-lg">
@@ -490,13 +470,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
           </span>
         </div>
 
-        {/* Inputs */}
         <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
         <input type="file" accept=".csv" ref={mergeInputRef} className="hidden" onChange={handleMergeUpload} />
         <input type="file" accept=".json" ref={restoreInputRef} className="hidden" onChange={handleRestoreSystem} />
 
         <div className="space-y-3">
-          {/* Import Master */}
           {importing ? (
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-stone-500">
@@ -517,21 +495,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
           )}
           
           <div className="grid grid-cols-2 gap-3">
-              {/* Merge Button */}
-              <button 
-                onClick={() => mergeInputRef.current?.click()}
-                className="py-3 flex flex-col items-center justify-center gap-1 border border-dashed border-stone-300 rounded-xl text-stone-600 hover:bg-stone-50 active:scale-95 transition-all"
-              >
+              <button onClick={() => mergeInputRef.current?.click()} className="py-3 flex flex-col items-center justify-center gap-1 border border-dashed border-stone-300 rounded-xl text-stone-600 hover:bg-stone-50 active:scale-95 transition-all">
                 <FilePlus size={16} />
                 <span className="text-xs font-bold">合併 CSV</span>
                 <span className="text-[10px] font-light text-stone-400">整合盤點結果</span>
               </button>
 
-              {/* Restore Button */}
-              <button 
-                onClick={() => restoreInputRef.current?.click()}
-                className="py-3 flex flex-col items-center justify-center gap-1 border border-stone-200 bg-stone-100 rounded-xl text-stone-600 hover:bg-stone-200 active:scale-95 transition-all"
-              >
+              <button onClick={() => restoreInputRef.current?.click()} className="py-3 flex flex-col items-center justify-center gap-1 border border-stone-200 bg-stone-100 rounded-xl text-stone-600 hover:bg-stone-200 active:scale-95 transition-all">
                 <Upload size={16} />
                 <span className="text-xs font-bold">系統還原 (JSON)</span>
                 <span className="text-[10px] opacity-70">回復完整備份</span>
@@ -543,7 +513,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         </div>
       </div>
 
-      {/* --- Section: Reporting --- */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-100">
         <h3 className="text-base font-bold text-stone-800 mb-4 flex items-center gap-2">
           <FileText size={18} className="text-stone-600" />
@@ -551,7 +520,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         </h3>
         
         <div className="grid grid-cols-1 gap-3">
-          {/* Standard Export */}
           <button 
             onClick={onExportScanned}
             disabled={records.length === 0}
@@ -565,40 +533,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
           </button>
 
           <div className="grid grid-cols-2 gap-3">
-             {/* Full Report */}
-             <button 
-               onClick={handleExportFullReport}
-               disabled={isProcessingReport}
-               className="py-3 flex flex-col items-center justify-center gap-1 border border-stone-200 bg-stone-800 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-stone-700 active:scale-95 transition-all"
-             >
+             <button onClick={handleExportFullReport} disabled={isProcessingReport} className="py-3 flex flex-col items-center justify-center gap-1 border border-stone-200 bg-stone-800 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-stone-700 active:scale-95 transition-all">
                {isProcessingReport ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
                <span className="text-xs font-bold">完整盤點總表</span>
                <span className="text-[9px] opacity-70">含未盤點/不在庫存清單中的物料</span>
              </button>
 
-             {/* Unscanned Report */}
-             <button 
-               onClick={handleExportUnscanned}
-               disabled={isProcessingReport || itemCount === 0}
-               className="py-3 flex flex-col items-center justify-center gap-1 border border-amber-200 bg-amber-50 text-amber-900 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-100 active:scale-95 transition-all"
-             >
+             <button onClick={handleExportUnscanned} disabled={isProcessingReport || itemCount === 0} className="py-3 flex flex-col items-center justify-center gap-1 border border-amber-200 bg-amber-50 text-amber-900 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-100 active:scale-95 transition-all">
                {isProcessingReport ? <Loader2 size={16} className="animate-spin" /> : <FileQuestion size={16} />}
                <span className="text-xs font-bold">未盤點清單</span>
              </button>
           </div>
           
-          {/* System Backup Button */}
-          <button 
-            onClick={handleBackupSystem}
-            className="mt-2 py-2 flex items-center justify-center gap-2 text-stone-500 hover:text-stone-800 hover:bg-stone-50 rounded-lg transition-colors"
-          >
+          <button onClick={handleBackupSystem} className="mt-2 py-2 flex items-center justify-center gap-2 text-stone-500 hover:text-stone-800 hover:bg-stone-50 rounded-lg transition-colors">
             <Archive size={14} />
             <span className="text-xs">下載系統完整備份 (.json)</span>
           </button>
         </div>
       </div>
 
-      {/* --- Section: User Management --- */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-100">
         <h3 className="text-base font-bold text-stone-800 mb-4 flex items-center gap-2">
           <Users size={18} className="text-stone-600" />
@@ -625,7 +578,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         </div>
       </div>
 
-      {/* Danger Zone */}
       <div className="mt-6 pt-6 border-t border-stone-100">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <button 
