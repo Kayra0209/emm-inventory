@@ -38,26 +38,47 @@ const splitCSV = (str: string) => {
     });
 }
 
-// Helper to read file with auto-detected encoding (UTF-8 or Big5)
+// Robust file reader with encoding detection
 const readFileAsText = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const buffer = e.target?.result as ArrayBuffer;
-      // 1. Try UTF-8 first
+      const view = new DataView(buffer);
+      
+      // 1. Detect BOM
+      let encoding = 'utf-8'; // Default
+      let offset = 0;
+
+      if (buffer.byteLength >= 3 && view.getUint8(0) === 0xEF && view.getUint8(1) === 0xBB && view.getUint8(2) === 0xBF) {
+        encoding = 'utf-8';
+        offset = 3;
+      } else if (buffer.byteLength >= 2 && view.getUint16(0, true) === 0xFEFF) {
+        encoding = 'utf-16le';
+        offset = 2;
+      } else if (buffer.byteLength >= 2 && view.getUint16(0, false) === 0xFEFF) {
+        encoding = 'utf-16be';
+        offset = 2;
+      } else {
+        // No BOM found. Try strict UTF-8 decoding.
+        try {
+           const decoder = new TextDecoder('utf-8', { fatal: true });
+           const text = decoder.decode(buffer);
+           resolve(text);
+           return;
+        } catch (e) {
+           // If strict UTF-8 fails, assume Big5 (Traditional Chinese Excel)
+           encoding = 'big5';
+        }
+      }
+
       try {
-        const decoder = new TextDecoder('utf-8', { fatal: true });
-        const text = decoder.decode(buffer);
+        const decoder = new TextDecoder(encoding);
+        // Slice buffer to skip BOM if present
+        const text = decoder.decode(buffer.slice(offset));
         resolve(text);
       } catch (err) {
-        // 2. If UTF-8 fails, fallback to Big5 (common for Traditional Chinese Excel)
-        try {
-          const decoder = new TextDecoder('big5');
-          const text = decoder.decode(buffer);
-          resolve(text);
-        } catch (err2) {
-          reject(err2);
-        }
+        reject(err);
       }
     };
     reader.onerror = (e) => reject(e);
@@ -113,6 +134,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         const cols = splitCSV(line);
         
         if (cols.length >= 1 && cols[0]) {
+          // Reconstruct description if it was split
+          // The CSV format: PartID, VendorSN, Project, Class, Location, Vendor, VendorPN, CustomerPN, Description...
+          // Index 8 starts Description.
+          const description = cols.slice(8).join(',').trim();
+
           currentChunk.push({
             PartID: cols[0],
             VendorSN: cols[1] || '',
@@ -122,7 +148,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
             Vendor: cols[5] || '',
             VendorPN: cols[6] || '',
             CustomerPN: cols[7] || '',
-            Description: cols[8] || '' 
+            Description: description || '' 
           });
         }
 
@@ -152,7 +178,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
     } catch (err) {
       console.error(err);
       setImporting(false);
-      setStatusMsg('匯入失敗：檔案讀取錯誤');
+      setStatusMsg('匯入失敗：檔案編碼錯誤，請確認檔案為 CSV 格式。');
     }
     
     e.target.value = '';
@@ -442,7 +468,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
       {/* --- Section: Master Data & Merge --- */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-stone-100">
         <div className="flex justify-between items-center mb-4">
-           {/* Reduced font size to text-base */}
            <h3 className="text-base font-bold text-stone-800 flex items-center gap-2">
              <Database size={18} className="text-stone-600" />
              資料庫與合併
