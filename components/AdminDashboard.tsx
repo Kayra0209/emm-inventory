@@ -134,8 +134,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
         const cols = splitCSV(line);
         
         if (cols.length >= 1 && cols[0]) {
-          // Robust Description handling: Join all remaining columns in case of extra commas
-          // CSV format: PartID(0), VendorSN(1), Project(2), Class(3), Location(4), Vendor(5), VendorPN(6), CustomerPN(7), Description(8...)
+          // Reconstruct description if it was split
+          // The CSV format: PartID(0), VendorSN(1), Project(2), Class(3), Location(4), Vendor(5), VendorPN(6), CustomerPN(7), Description(8...)
           const description = cols.length > 8 ? cols.slice(8).join(',').trim() : (cols[8] || '');
 
           currentChunk.push({
@@ -538,7 +538,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ records, setRecords, on
               </button>
           </div>
           <p className="text-[10px] text-stone-400 mt-2 text-center">
-             支援編碼: UTF-8, Big5 (Excel), UTF-16
+             主檔匯入格式: PartID, Vendor S/N, Project, Class, Location, Vendor, Vendor P/N, Customer P/N, Description
           </p>
         </div>
       </div>

@@ -13,15 +13,19 @@ type CustomerCategory = typeof CUSTOMER_CATEGORIES[number];
 const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
   const [customerFilter, setCustomerFilter] = useState<CustomerCategory>('ALL');
   
+  // Stats State
   const [masterCounts, setMasterCounts] = useState<{
     total: number;
     byCustomer: Record<string, number>;
   }>({ total: 0, byCustomer: {} });
   
+  // Unscanned Browser State
   const [showUnscanned, setShowUnscanned] = useState(false);
   const [allUnscanned, setAllUnscanned] = useState<MasterItem[]>([]);
   const [loadingUnscanned, setLoadingUnscanned] = useState(false);
   const [unscannedSearchTerm, setUnscannedSearchTerm] = useState('');
+  
+  // Class Filter State
   const [classFilter, setClassFilter] = useState<string>('ALL');
 
   useEffect(() => {
@@ -34,7 +38,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       let total = 0;
       allItems.forEach(item => {
         total++;
-        // CHANGED: Categorize by PartID Prefix (A26, C38...)
+        // CHANGED: Use PartID prefix instead of Project field
         const partId = (item.PartID || '').trim().toUpperCase();
         
         if (partId.startsWith('A26')) counts['A26']++;
@@ -55,9 +59,10 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
     let totalScanned = 0;
 
     records.forEach(r => {
+      // Checked items also count as completed
       if (r.Status === 'OK' || r.Status === 'Checked') {
         totalScanned++;
-        // CHANGED: Categorize by PartID Prefix
+        // CHANGED: Use PartID prefix instead of Project field
         const partId = (r.PartID || '').trim().toUpperCase();
         
         if (partId.startsWith('A26')) counts['A26']++;
@@ -91,17 +96,21 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
     ? Math.round((displayData.current / displayData.target) * 100) 
     : 0;
 
+  // Logic to fetch Unscanned Items (Fetch all, then filter in render)
   const handleViewUnscanned = async () => {
     setShowUnscanned(true);
     setLoadingUnscanned(true);
-    setUnscannedSearchTerm(''); 
-    setClassFilter('ALL'); 
+    setUnscannedSearchTerm(''); // Reset search
+    setClassFilter('ALL'); // Reset class filter
     
     try {
         const scannedSet = new Set(records.map(r => r.PartID));
         const allItems = await db.getAll();
+        
+        // Filter out scanned items only (ignore customer filter for now)
         const unscanned = allItems.filter(item => !scannedSet.has(item.PartID));
         setAllUnscanned(unscanned);
+
     } catch (e) {
         console.error(e);
     } finally {
@@ -109,13 +118,14 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
     }
   };
 
+  // Reset class filter when customer filter changes
   useEffect(() => {
       if (showUnscanned) {
           setClassFilter('ALL');
       }
   }, [customerFilter, showUnscanned]);
 
-  // Filter Unscanned by Customer (PartID Prefix)
+  // 1. First, filter by Customer (PartID Prefix)
   const unscannedByCustomer = useMemo(() => {
      let filtered = allUnscanned;
      if (customerFilter !== 'ALL') {
@@ -132,6 +142,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
      return filtered;
   }, [allUnscanned, customerFilter]);
 
+  // 2. Extract available classes based on current customer filter
   const availableClasses = useMemo(() => {
       const classes = new Set<string>();
       unscannedByCustomer.forEach(item => {
@@ -140,13 +151,16 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       return Array.from(classes).sort();
   }, [unscannedByCustomer]);
 
+  // 3. Final filtered list (Customer -> Class -> Search)
   const filteredUnscannedList = useMemo(() => {
      let filtered = unscannedByCustomer;
 
+     // Filter by Class
      if (classFilter !== 'ALL') {
          filtered = filtered.filter(item => item.Class === classFilter);
      }
 
+     // Filter by Search Term
      if (unscannedSearchTerm.trim()) {
          const term = unscannedSearchTerm.toLowerCase();
          filtered = filtered.filter(item => 
@@ -159,10 +173,13 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
      return filtered;
   }, [unscannedByCustomer, classFilter, unscannedSearchTerm]);
 
+  // Display only top 100 to prevent lag
   const displayUnscanned = filteredUnscannedList.slice(0, 100);
 
   return (
     <div className="space-y-6 relative min-h-full">
+      
+      {/* Unscanned Modal / Overlay */}
       {showUnscanned && (
         <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col animate-in slide-in-from-bottom-5">
            <div className="bg-stone-800 text-stone-50 p-4 shadow-md flex justify-between items-center shrink-0">
@@ -175,9 +192,11 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
               </button>
            </div>
            
+           {/* Filter Bar inside Modal */}
            <div className="bg-stone-100 px-4 py-3 border-b border-stone-200 flex flex-col gap-3 shrink-0">
               <div className="flex justify-between items-center gap-2">
                   <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
+                      {/* Customer Filter */}
                       <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-stone-200 shadow-sm shrink-0">
                         <Filter size={12} className="text-stone-400" />
                         <select 
@@ -189,6 +208,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                         </select>
                       </div>
 
+                      {/* Class Filter */}
                       <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-stone-200 shadow-sm shrink-0">
                         <Layers size={12} className="text-stone-400" />
                         <select 
@@ -207,6 +227,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                   </span>
               </div>
               
+              {/* Search Box */}
               <div className="relative w-full">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={12} />
                   <input 
@@ -232,6 +253,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                       <div key={item.PartID} className="bg-white p-3 rounded-xl border-l-4 border-amber-500 shadow-sm hover:bg-amber-50 transition-colors">
                          <div className="flex justify-between items-start mb-2">
                             <span className="font-mono font-bold text-stone-800 text-sm">{item.PartID}</span>
+                            {/* Improved Location Visibility */}
                             <div className="flex items-center gap-1 bg-stone-800 text-amber-400 px-2 py-0.5 rounded-lg shadow-sm">
                                <MapPin size={10} />
                                <span className="text-[10px] font-bold">{item.Location || '無儲位'}</span>
@@ -259,6 +281,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
         </div>
       )}
 
+      {/* Control Bar */}
       <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-200 shadow-sm">
         <div className="flex items-center gap-2 text-stone-700 font-bold">
            <BarChart2 size={16} />
@@ -278,6 +301,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
         </div>
       </div>
 
+      {/* Main Progress Card */}
       <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 relative overflow-hidden">
          <div className="absolute top-0 right-0 p-4 opacity-5">
            <Target size={80} />

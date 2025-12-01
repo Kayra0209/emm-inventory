@@ -16,7 +16,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false); 
   
-  // Anti-jitter: Track last scanned code and time
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
   const COOLDOWN_MS = 1000; 
@@ -61,16 +60,13 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       const qrCode = new Html5Qrcode(scannerRegionId);
       html5QrCodeRef.current = qrCode;
 
-      // --- CONFIGURATION FIX ---
-      // The library throws an error if we pass width/height/advanced here.
-      // We must pass ONLY { facingMode: "environment" }.
+      // Pass ONLY simple config to start() to avoid 'found 4 keys' error
       const cameraIdOrConfig = {
           facingMode: "environment"
       };
 
       const config = {
         fps: 15, 
-        // 90% scan box to fit long Code-39 barcodes
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
             return {
@@ -92,13 +88,13 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       if (!isMountedRef.current || currentRequestId !== requestIdRef.current) return;
 
+      // Use 'as any' to bypass TS check
       await qrCode.start(
-        cameraIdOrConfig,
+        cameraIdOrConfig as any,
         config,
         (decodedText) => {
            if (isMountedRef.current) {
              const now = Date.now();
-             // Cooldown logic: ignore the SAME code if scanned recently
              if (decodedText === lastScannedCodeRef.current && (now - lastScannedTimeRef.current < COOLDOWN_MS)) {
                 return;
              }
@@ -110,7 +106,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         () => {}
       );
 
-      // Attempt to reset zoom to 1.0 explicitly (if supported)
       if (isMountedRef.current) {
          try {
              // @ts-ignore
@@ -184,7 +179,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
     <div className="fixed inset-0 z-50 bg-stone-900 flex flex-col items-center justify-center">
       <div className="relative w-full max-w-md bg-black h-full flex flex-col justify-center">
         
-        {/* Scanner Container */}
         <div className="w-full flex-1 relative bg-black flex items-center justify-center overflow-hidden">
             {isInitializing && !cameraError && (
                 <div className="absolute text-white z-10 flex flex-col items-center gap-2">
@@ -195,7 +189,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
             <div id={scannerRegionId} className="w-full h-full" />
         </div>
         
-        {/* Controls - Increased Z-Index to z-[70] to appear ABOVE the ScanResultOverlay (z-[60]) */}
         <div className="absolute top-4 right-4 flex gap-4 z-[70]">
           {hasTorch && !cameraError && (
             <button 
@@ -213,7 +206,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
           </button>
         </div>
 
-        {/* Visual Guide Overlay */}
         {!cameraError && !isInitializing && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
                 <div className="w-[90%] aspect-square border-2 border-amber-500/50 rounded-lg relative">

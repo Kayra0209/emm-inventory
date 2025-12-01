@@ -150,9 +150,6 @@ function App() {
     return () => clearTimeout(timer);
   }, [manualInput]);
 
-  // REMOVED: beforeunload event listener to stop the annoying prompt on refresh.
-  // Data is saved to localStorage/IndexedDB automatically, so this prompt is unnecessary.
-
   // Scan Overlay Timer
   useEffect(() => {
     let timer: any;
@@ -424,9 +421,15 @@ function App() {
         <div className="h-full overflow-y-auto p-4 pb-24 no-scrollbar">
           
           {currentView === 'SCAN' && (
-            <div className="flex flex-col h-full gap-4">
+            <div className="flex flex-col h-full gap-4 relative">
               
-              {/* Export Button in Scan Interface */}
+              {/* Scan Overlay inserted here */}
+              <ScanResultOverlay 
+                 status={overlayStatus} 
+                 record={overlayRecord} 
+                 visible={showOverlay} 
+              />
+
               <div className="flex justify-end -mb-2 z-10">
                 <button 
                   onClick={handleExportScanned}
@@ -440,7 +443,7 @@ function App() {
               <StatusFeedback 
                 status={lastScanStatus} 
                 lastRecord={lastRecord} 
-                onViewRelated={handleViewRelated} // Pass the callback
+                onViewRelated={handleViewRelated} 
               />
               
               <div className="flex-1 flex flex-col items-center justify-center min-h-[250px]">
@@ -452,7 +455,6 @@ function App() {
                   <span className="text-stone-200 font-medium text-xs">啟動掃描</span>
                 </button>
 
-                {/* Manual Input Form with Autocomplete */}
                 <form onSubmit={handleManualSubmit} className="w-full max-w-xs px-2 relative z-10">
                   <div className="relative flex items-center group">
                     <input 
@@ -471,7 +473,6 @@ function App() {
                     </button>
                   </div>
 
-                  {/* Suggestions Dropdown */}
                   {showSuggestions && (
                       <div className="absolute w-full mt-2 bg-white rounded-xl shadow-xl border border-stone-100 overflow-hidden z-20 max-h-60 overflow-y-auto">
                           {suggestions.map(item => (
@@ -495,7 +496,6 @@ function App() {
                 </form>
               </div>
 
-              {/* Recent Records */}
               <div className="mt-auto bg-white rounded-xl px-4 py-3 shadow-sm border border-stone-100 opacity-90">
                 <div className="flex justify-between items-center mb-2">
                    <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">最近紀錄</h4>
@@ -515,7 +515,6 @@ function App() {
                             r.Status === 'Duplicated' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
                             }`}>{r.Status}</span>
                             
-                            {/* Quick Delete Button */}
                             <button 
                                 onClick={(e) => handleDeleteSingle(r.id, e)}
                                 className="p-1 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
