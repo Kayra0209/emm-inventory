@@ -61,28 +61,26 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       const qrCode = new Html5Qrcode(scannerRegionId);
       html5QrCodeRef.current = qrCode;
 
-      // --- CRITICAL CONFIGURATION FIX ---
-      // Problem: 
-      // 1. Zoom/Crop issue -> Caused by 16:9 aspect ratio request.
-      // 2. Code-39/128 scan failure -> Caused by low resolution (default 640x480).
-      //
-      // Solution:
-      // Request 1280x960 (4:3 High Res). 
-      // This matches most phone sensors natively, preventing crop (zoom) while providing sharpness for 1D barcodes.
+      // --- CONFIGURATION UPDATE FOR CODE-39 ---
+      // 1. Resolution: Requesting 1920 (FHD) width provides more pixels per bar for dense 1D barcodes.
+      // 2. Aspect Ratio: We allow flexible height to let the OS pick the best sensor mode (4:3 or 16:9).
+      // 3. Focus: Request continuous focus.
       const cameraIdOrConfig = {
           facingMode: "environment",
-          width: { min: 1024, ideal: 1280, max: 1920 },
-          height: { min: 768, ideal: 960, max: 1440 }
+          width: { min: 1280, ideal: 1920, max: 3840 },
+          height: { min: 720, ideal: 1080, max: 2160 },
+          advanced: [{ focusMode: "continuous" }]
       };
 
       const config = {
-        fps: 15, // Increased FPS for faster barcode acquisition
+        fps: 15, 
+        // 4. Scan Box: Increased to 90% to allow long Code-39 barcodes to fit
+        //    without the user having to move the camera too far back (which loses detail).
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            // Increased to 85% to make it easier to fit long barcodes (Code-39)
             return {
-                width: Math.floor(minEdge * 0.85),
-                height: Math.floor(minEdge * 0.85)
+                width: Math.floor(minEdge * 0.90),
+                height: Math.floor(minEdge * 0.90)
             };
         },
         formatsToSupport: [ 
@@ -92,7 +90,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
             Html5QrcodeSupportedFormats.EAN_13,
             Html5QrcodeSupportedFormats.UPC_A
         ],
-        // Experimental feature often improves 1D barcode reading on mobile
         experimentalFeatures: {
             useBarCodeDetectorIfSupported: true
         }
@@ -117,7 +114,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         () => {}
       );
 
-      // Attempt to reset zoom again just in case
+      // Attempt to reset zoom to 1.0 explicitly
       if (isMountedRef.current) {
          try {
              // @ts-ignore
@@ -223,11 +220,11 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         {/* Visual Guide Overlay */}
         {!cameraError && !isInitializing && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
-                <div className="w-[280px] h-[280px] border-2 border-amber-500/50 rounded-lg relative">
-                    <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-500 rounded-tl-sm"></div>
-                    <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-500 rounded-tr-sm"></div>
-                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-500 rounded-bl-sm"></div>
-                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-amber-500 rounded-br-sm"></div>
+                <div className="w-[85%] aspect-square border-2 border-amber-500/50 rounded-lg relative">
+                    <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-amber-500 rounded-tl-sm"></div>
+                    <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-amber-500 rounded-tr-sm"></div>
+                    <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-amber-500 rounded-bl-sm"></div>
+                    <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-amber-500 rounded-br-sm"></div>
                     <div className="absolute left-2 right-2 h-0.5 bg-amber-400/80 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-scan top-1/2"></div>
                 </div>
             </div>
