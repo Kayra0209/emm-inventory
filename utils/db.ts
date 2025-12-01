@@ -29,16 +29,26 @@ class InventoryDB extends Dexie {
        if (byVendorPN.length > 0) return byVendorPN;
     }
 
-    // Strategy 2: Fuzzy Match via Description
-    // Instead of exact match, we filter items that contain significant parts of the description
+    // Strategy 2: Structured Match via Description
+    // Search using the first 4 segments of the comma-separated description
     if (record.Description && record.Description !== 'NA') {
       const desc = record.Description.toLowerCase().trim();
       
-      // Use the first 15 chars as a "Project/Series" key or token based approach
-      const searchKey = desc.substring(0, Math.min(desc.length, 15));
+      // NEW LOGIC: Take the first 4 comma-separated segments as the "Series/Model Key"
+      const parts = desc.split(',').map(p => p.trim());
+      // Join first 4 parts or less if description is short
+      const searchKey = parts.slice(0, 4).join(',').toLowerCase();
+
+      // If search key is too short, fallback to simpler check
+      if (searchKey.length < 5) {
+          return this.masterItems.filter(item => {
+            return (item.Description || '').toLowerCase().includes(searchKey);
+          }).toArray();
+      }
 
       return this.masterItems.filter(item => {
         const itemDesc = (item.Description || '').toLowerCase();
+        // Check if item starts with the same series key
         return itemDesc.includes(searchKey);
       }).toArray();
     }
