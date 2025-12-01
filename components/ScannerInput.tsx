@@ -16,10 +16,9 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false); 
   
-  // Anti-jitter: Track last scanned code and time
+  // Anti-jitter
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
-  // Reduced to 1000ms for snappier continuous scanning feel
   const COOLDOWN_MS = 1000; 
 
   const onScanRef = useRef(onScan);
@@ -63,7 +62,8 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       html5QrCodeRef.current = qrCode;
 
       // --- CONFIGURATION ---
-      // Requesting High Resolution 4:3 to support both wide angle and detailed 1D barcodes
+      // Requesting High Resolution 4:3 (1080p-ish) to support detailed 1D barcodes
+      // while preventing OS-level crop/zoom often caused by 16:9 requests.
       const cameraIdOrConfig = {
           facingMode: "environment",
           width: { min: 1280, ideal: 1920, max: 3840 },
@@ -73,7 +73,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       const config = {
         fps: 15, 
-        // 90% scan box to fit long barcodes
+        // 90% scan box to fit long Code-39 barcodes
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
             return {
@@ -95,13 +95,13 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       if (!isMountedRef.current || currentRequestId !== requestIdRef.current) return;
 
+      // Fix for TypeScript build error: Cast cameraIdOrConfig to any to bypass strict type check
       await qrCode.start(
-        cameraIdOrConfig,
+        cameraIdOrConfig as any,
         config,
         (decodedText) => {
            if (isMountedRef.current) {
              const now = Date.now();
-             // Cooldown logic: ignore the SAME code if scanned recently
              if (decodedText === lastScannedCodeRef.current && (now - lastScannedTimeRef.current < COOLDOWN_MS)) {
                 return;
              }
