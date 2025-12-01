@@ -38,12 +38,13 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       let total = 0;
       allItems.forEach(item => {
         total++;
-        const project = (item.Project || '').trim().toUpperCase();
-        // Categorize logic based on Project field
-        if (project.includes('A26')) counts['A26']++;
-        else if (project.includes('A31')) counts['A31']++;
-        else if (project.includes('C38')) counts['C38']++;
-        else if (project.includes('INT')) counts['INT']++;
+        // CHANGED: Use PartID prefix instead of Project field
+        const partId = (item.PartID || '').trim().toUpperCase();
+        
+        if (partId.startsWith('A26')) counts['A26']++;
+        else if (partId.startsWith('A31')) counts['A31']++;
+        else if (partId.startsWith('C38')) counts['C38']++;
+        else if (partId.startsWith('INT')) counts['INT']++;
         else counts['OTHERS']++;
       });
       setMasterCounts({ total, byCustomer: counts });
@@ -61,11 +62,13 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       // Checked items also count as completed
       if (r.Status === 'OK' || r.Status === 'Checked') {
         totalScanned++;
-        const project = (r.Project || '').trim().toUpperCase();
-        if (project.includes('A26')) counts['A26']++;
-        else if (project.includes('A31')) counts['A31']++;
-        else if (project.includes('C38')) counts['C38']++;
-        else if (project.includes('INT')) counts['INT']++;
+        // CHANGED: Use PartID prefix instead of Project field
+        const partId = (r.PartID || '').trim().toUpperCase();
+        
+        if (partId.startsWith('A26')) counts['A26']++;
+        else if (partId.startsWith('A31')) counts['A31']++;
+        else if (partId.startsWith('C38')) counts['C38']++;
+        else if (partId.startsWith('INT')) counts['INT']++;
         else counts['OTHERS']++;
       }
     });
@@ -104,7 +107,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
         const scannedSet = new Set(records.map(r => r.PartID));
         const allItems = await db.getAll();
         
-        // Filter out scanned items only (ignore customer filter for now)
+        // Filter out scanned items only
         const unscanned = allItems.filter(item => !scannedSet.has(item.PartID));
         setAllUnscanned(unscanned);
 
@@ -122,17 +125,17 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       }
   }, [customerFilter, showUnscanned]);
 
-  // 1. First, filter by Customer (Project)
+  // 1. First, filter by Customer (PartID Prefix)
   const unscannedByCustomer = useMemo(() => {
      let filtered = allUnscanned;
      if (customerFilter !== 'ALL') {
         filtered = filtered.filter(item => {
-            const project = (item.Project || '').trim().toUpperCase();
+            const partId = (item.PartID || '').trim().toUpperCase();
             if (customerFilter === 'OTHERS') {
-                const isSpecific = ['A26', 'A31', 'C38', 'INT'].some(k => project.includes(k));
+                const isSpecific = ['A26', 'A31', 'C38', 'INT'].some(k => partId.startsWith(k));
                 return !isSpecific;
             } else {
-                return project.includes(customerFilter);
+                return partId.startsWith(customerFilter);
             }
         });
      }
@@ -180,12 +183,12 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       {showUnscanned && (
         <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col animate-in slide-in-from-bottom-5">
            <div className="bg-stone-800 text-stone-50 p-4 shadow-md flex justify-between items-center shrink-0">
-              <h2 className="font-bold flex items-center gap-2 text-base">
-                 <Eye size={18} className="text-amber-400" />
+              <h2 className="font-bold flex items-center gap-2 text-sm">
+                 <Eye size={16} className="text-amber-400" />
                  未盤點清單
               </h2>
               <button onClick={() => setShowUnscanned(false)} className="p-2 bg-stone-700 rounded-full hover:bg-stone-600">
-                 <X size={18} />
+                 <X size={16} />
               </button>
            </div>
            
@@ -195,11 +198,11 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                   <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
                       {/* Customer Filter */}
                       <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-stone-200 shadow-sm shrink-0">
-                        <Filter size={14} className="text-stone-400" />
+                        <Filter size={12} className="text-stone-400" />
                         <select 
                            value={customerFilter}
                            onChange={(e) => setCustomerFilter(e.target.value as CustomerCategory)}
-                           className="bg-transparent border-none text-sm font-bold text-stone-700 focus:outline-none focus:ring-0 cursor-pointer py-1 pr-6"
+                           className="bg-transparent border-none text-xs font-bold text-stone-700 focus:outline-none focus:ring-0 cursor-pointer py-1 pr-6"
                         >
                           {CUSTOMER_CATEGORIES.map(c => <option key={c} value={c}>{c === 'ALL' ? '全部專案' : c}</option>)}
                         </select>
@@ -207,11 +210,11 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
 
                       {/* Class Filter */}
                       <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-stone-200 shadow-sm shrink-0">
-                        <Layers size={14} className="text-stone-400" />
+                        <Layers size={12} className="text-stone-400" />
                         <select 
                            value={classFilter}
                            onChange={(e) => setClassFilter(e.target.value)}
-                           className="bg-transparent border-none text-sm font-bold text-stone-700 focus:outline-none focus:ring-0 cursor-pointer py-1 pr-6 max-w-[150px] truncate"
+                           className="bg-transparent border-none text-xs font-bold text-stone-700 focus:outline-none focus:ring-0 cursor-pointer py-1 pr-6 max-w-[150px] truncate"
                         >
                           <option value="ALL">全部類別 ({availableClasses.length})</option>
                           {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
@@ -219,45 +222,45 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                       </div>
                   </div>
                   
-                  <span className="text-xs text-stone-400 font-mono whitespace-nowrap">
+                  <span className="text-[10px] text-stone-400 font-mono whitespace-nowrap">
                     {filteredUnscannedList.length} 筆
                   </span>
               </div>
               
               {/* Search Box */}
               <div className="relative w-full">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14} />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={12} />
                   <input 
                       type="text"
                       value={unscannedSearchTerm}
                       onChange={(e) => setUnscannedSearchTerm(e.target.value)}
                       placeholder="搜尋 PartID 或 說明..."
-                      className="w-full pl-9 pr-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-stone-400"
+                      className="w-full pl-9 pr-3 py-2 bg-white border border-stone-200 rounded-lg text-xs focus:outline-none focus:border-stone-400"
                   />
               </div>
            </div>
 
            <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
               {loadingUnscanned ? (
-                 <div className="text-center py-10 text-stone-400">讀取中...</div>
+                 <div className="text-center py-10 text-stone-400 text-sm">讀取中...</div>
               ) : displayUnscanned.length === 0 ? (
-                 <div className="text-center py-10 text-emerald-600 font-bold">
+                 <div className="text-center py-10 text-emerald-600 font-bold text-sm">
                     {allUnscanned.length === 0 ? "恭喜！所有項目皆已盤點完畢。" : "查無符合項目。"}
                  </div>
               ) : (
                  <>
                    {displayUnscanned.map(item => (
-                      <div key={item.PartID} className="bg-white p-4 rounded-xl border-l-4 border-amber-500 shadow-sm hover:bg-amber-50 transition-colors">
+                      <div key={item.PartID} className="bg-white p-3 rounded-xl border-l-4 border-amber-500 shadow-sm hover:bg-amber-50 transition-colors">
                          <div className="flex justify-between items-start mb-2">
                             <span className="font-mono font-bold text-stone-800 text-sm">{item.PartID}</span>
                             {/* Improved Location Visibility */}
-                            <div className="flex items-center gap-1 bg-stone-800 text-amber-400 px-2 py-1 rounded-lg shadow-sm">
-                               <MapPin size={12} />
-                               <span className="text-xs font-bold">{item.Location || '無儲位'}</span>
+                            <div className="flex items-center gap-1 bg-stone-800 text-amber-400 px-2 py-0.5 rounded-lg shadow-sm">
+                               <MapPin size={10} />
+                               <span className="text-[10px] font-bold">{item.Location || '無儲位'}</span>
                             </div>
                          </div>
-                         <p className="text-xs text-stone-600 line-clamp-2 mb-2 leading-relaxed">{item.Description}</p>
-                         <div className="flex flex-wrap gap-2 text-[10px] text-stone-400">
+                         <p className="text-[10px] text-stone-600 line-clamp-2 mb-2 leading-relaxed">{item.Description}</p>
+                         <div className="flex flex-wrap gap-2 text-[9px] text-stone-400">
                             <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">{item.Project}</span>
                             <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 font-medium text-stone-600">{item.Class}</span>
                             <span className="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">{item.Vendor}</span>
@@ -268,7 +271,7 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                       </div>
                    ))}
                    {filteredUnscannedList.length > 100 && (
-                     <div className="text-center text-xs text-stone-400 py-2">
+                     <div className="text-center text-[10px] text-stone-400 py-2">
                        僅顯示前 100 筆，請使用篩選功能查看更多
                      </div>
                    )}
@@ -281,13 +284,13 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       {/* Control Bar */}
       <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-200 shadow-sm">
         <div className="flex items-center gap-2 text-stone-700 font-bold">
-           <BarChart2 size={18} />
+           <BarChart2 size={16} />
            <span className="text-sm">盤點狀態</span>
         </div>
         <div className="relative">
-            <Filter size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400"/>
+            <Filter size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400"/>
             <select 
-              className="pl-8 pr-3 py-1.5 bg-stone-100 border-none rounded-lg text-sm text-stone-700 font-medium focus:outline-none focus:ring-2 focus:ring-stone-200"
+              className="pl-8 pr-3 py-1.5 bg-stone-100 border-none rounded-lg text-xs text-stone-700 font-medium focus:outline-none focus:ring-2 focus:ring-stone-200"
               value={customerFilter}
               onChange={(e) => setCustomerFilter(e.target.value as CustomerCategory)}
             >
@@ -301,16 +304,16 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
       {/* Main Progress Card */}
       <div className="bg-white rounded-2xl p-6 shadow-md border border-stone-100 relative overflow-hidden">
          <div className="absolute top-0 right-0 p-4 opacity-5">
-           <Target size={100} />
+           <Target size={80} />
          </div>
 
-         <h3 className="text-stone-500 text-xs font-bold uppercase tracking-wider mb-1">{displayData.label}</h3>
+         <h3 className="text-stone-500 text-[10px] font-bold uppercase tracking-wider mb-1">{displayData.label}</h3>
          <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-3xl font-bold text-stone-800">{displayData.current}</span>
-            <span className="text-stone-400 text-base">/ {displayData.target}</span>
+            <span className="text-2xl font-bold text-stone-800">{displayData.current}</span>
+            <span className="text-stone-400 text-sm">/ {displayData.target}</span>
          </div>
 
-         <div className="relative h-4 bg-stone-100 rounded-full overflow-hidden shadow-inner">
+         <div className="relative h-3 bg-stone-100 rounded-full overflow-hidden shadow-inner">
             <div 
               className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-out flex items-center justify-end pr-2
                 ${progressPct >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}
@@ -358,10 +361,10 @@ const StockStatus: React.FC<StockStatusProps> = ({ records }) => {
                 <div key={cust} className="p-4 flex items-center justify-between hover:bg-stone-50 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    <span className="font-bold text-stone-700 text-sm">{cust}</span>
+                    <span className="font-bold text-stone-700 text-xs">{cust}</span>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <span className="text-xs text-stone-400 font-mono">
+                    <span className="text-[10px] text-stone-400 font-mono">
                       {current} / {target}
                     </span>
                     <div className="w-20 h-1 bg-stone-100 rounded-full overflow-hidden">
