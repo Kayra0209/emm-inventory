@@ -61,28 +61,41 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       const qrCode = new Html5Qrcode(scannerRegionId);
       html5QrCodeRef.current = qrCode;
 
-      // SIMPLIFIED CONFIGURATION:
-      // We removed complex camera selection and resolution constraints.
-      // Using purely `facingMode: "environment"` is the most robust way to get the 
-      // standard 1x Main Camera on mobile devices without OS-level digital cropping/zoom.
-      const cameraIdOrConfig = { facingMode: "environment" };
+      // --- CRITICAL CONFIGURATION FIX ---
+      // Problem: 
+      // 1. Zoom/Crop issue -> Caused by 16:9 aspect ratio request.
+      // 2. Code-39/128 scan failure -> Caused by low resolution (default 640x480).
+      //
+      // Solution:
+      // Request 1280x960 (4:3 High Res). 
+      // This matches most phone sensors natively, preventing crop (zoom) while providing sharpness for 1D barcodes.
+      const cameraIdOrConfig = {
+          facingMode: "environment",
+          width: { min: 1024, ideal: 1280, max: 1920 },
+          height: { min: 768, ideal: 960, max: 1440 }
+      };
 
       const config = {
-        fps: 10,
+        fps: 15, // Increased FPS for faster barcode acquisition
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            // 60% box size usually feels comfortable for centering
+            // Increased to 85% to make it easier to fit long barcodes (Code-39)
             return {
-                width: Math.floor(minEdge * 0.6),
-                height: Math.floor(minEdge * 0.6)
+                width: Math.floor(minEdge * 0.85),
+                height: Math.floor(minEdge * 0.85)
             };
         },
         formatsToSupport: [ 
             Html5QrcodeSupportedFormats.QR_CODE, 
             Html5QrcodeSupportedFormats.CODE_128, 
+            Html5QrcodeSupportedFormats.CODE_39,
             Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.CODE_39
-        ]
+            Html5QrcodeSupportedFormats.UPC_A
+        ],
+        // Experimental feature often improves 1D barcode reading on mobile
+        experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+        }
       };
 
       if (!isMountedRef.current || currentRequestId !== requestIdRef.current) return;
@@ -104,19 +117,20 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         () => {}
       );
 
-      // Try to enable torch button if supported
+      // Attempt to reset zoom again just in case
       if (isMountedRef.current) {
          try {
-            // Apply a harmless constraint to check if track supports advanced capabilities
-            const track = qrCode.getRunningTrackCameraCapabilities();
-            // @ts-ignore
-            if (track && track.torch) {
-                setHasTorch(true);
-            }
-         } catch(e) {
-             // Fallback: detection failed, but maybe torch works, hide button to be safe or show it?
-             // Safest to hide if we can't confirm.
-         }
+             // @ts-ignore
+             const track = qrCode.getRunningTrackCameraCapabilities();
+             // @ts-ignore
+             if (track && track.zoom) {
+                 await qrCode.applyVideoConstraints({
+                     // @ts-ignore
+                     advanced: [{ zoom: 1.0 }] 
+                 } as any);
+             }
+             setHasTorch(true);
+         } catch(e) {}
       }
 
       setIsInitializing(false);
@@ -209,7 +223,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         {/* Visual Guide Overlay */}
         {!cameraError && !isInitializing && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
-                <div className="w-[220px] h-[220px] border-2 border-amber-500/50 rounded-lg relative">
+                <div className="w-[280px] h-[280px] border-2 border-amber-500/50 rounded-lg relative">
                     <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-500 rounded-tl-sm"></div>
                     <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-500 rounded-tr-sm"></div>
                     <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-500 rounded-bl-sm"></div>
