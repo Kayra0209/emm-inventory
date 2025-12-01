@@ -16,10 +16,11 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false); 
   
-  // Anti-jitter
+  // Anti-jitter: Track last scanned code and time
   const lastScannedCodeRef = useRef<string | null>(null);
   const lastScannedTimeRef = useRef<number>(0);
-  const COOLDOWN_MS = 1500; 
+  // Reduced to 1000ms for snappier continuous scanning feel
+  const COOLDOWN_MS = 1000; 
 
   const onScanRef = useRef(onScan);
   useEffect(() => {
@@ -61,9 +62,9 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       const qrCode = new Html5Qrcode(scannerRegionId);
       html5QrCodeRef.current = qrCode;
 
-      // --- CONFIGURATION UPDATE FOR CODE-39 ---
+      // --- CONFIGURATION ---
       // 1. Resolution: Requesting 1920 (FHD) width provides more pixels per bar for dense 1D barcodes.
-      // 2. Aspect Ratio: We allow flexible height to let the OS pick the best sensor mode (4:3 or 16:9).
+      // 2. Aspect Ratio: Flexible height allows OS to pick best sensor mode (usually 4:3).
       // 3. Focus: Request continuous focus.
       const cameraIdOrConfig = {
           facingMode: "environment",
@@ -75,7 +76,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       const config = {
         fps: 15, 
         // 4. Scan Box: Increased to 90% to allow long Code-39 barcodes to fit
-        //    without the user having to move the camera too far back (which loses detail).
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
             return {
@@ -103,6 +103,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         (decodedText) => {
            if (isMountedRef.current) {
              const now = Date.now();
+             // Cooldown logic: ignore the SAME code if scanned recently
              if (decodedText === lastScannedCodeRef.current && (now - lastScannedTimeRef.current < COOLDOWN_MS)) {
                 return;
              }
@@ -199,8 +200,8 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
             <div id={scannerRegionId} className="w-full h-full" />
         </div>
         
-        {/* Controls */}
-        <div className="absolute top-4 right-4 flex gap-4 z-20">
+        {/* Controls - Increased Z-Index to z-[70] to appear ABOVE the ScanResultOverlay (z-[60]) */}
+        <div className="absolute top-4 right-4 flex gap-4 z-[70]">
           {hasTorch && !cameraError && (
             <button 
               onClick={toggleTorch}
@@ -220,7 +221,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         {/* Visual Guide Overlay */}
         {!cameraError && !isInitializing && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
-                <div className="w-[85%] aspect-square border-2 border-amber-500/50 rounded-lg relative">
+                <div className="w-[90%] aspect-square border-2 border-amber-500/50 rounded-lg relative">
                     <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-amber-500 rounded-tl-sm"></div>
                     <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-amber-500 rounded-tr-sm"></div>
                     <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-amber-500 rounded-bl-sm"></div>
