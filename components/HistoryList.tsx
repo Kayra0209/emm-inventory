@@ -20,22 +20,24 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
   const [page, setPage] = useState(1);
   const itemsPerPage = 20;
   
-  // Related Items State
   const [relatedItems, setRelatedItems] = useState<MasterItem[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
+  const [searchKeyDisplay, setSearchKeyDisplay] = useState(''); // New state for display
   
-  // Multi-select state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Auto-switch to related mode if lastRecord changes
   useEffect(() => {
     if (lastRecord) {
-      // Switch view if we have scanned something new
       setMode('RELATED');
       setRelatedLoading(true);
       
-      // Use the new smarter search
+      // Calculate display key
+      const desc = lastRecord.Description || '';
+      const parts = desc.split(',').map(p => p.trim());
+      const key = parts.slice(0, 4).join(', ');
+      setSearchKeyDisplay(key || '無描述');
+
       db.findRelatedItems({
         VendorPN: lastRecord.VendorPN,
         Description: lastRecord.Description
@@ -46,7 +48,6 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
     }
   }, [lastRecord]);
 
-  // --- Filter Logic for HISTORY ---
   const filteredHistory = useMemo(() => {
     return records.filter(r => {
       const term = searchTerm.toLowerCase();
@@ -67,12 +68,8 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
   const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
   const paginatedHistory = filteredHistory.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
-  // --- Logic for RELATED ---
-  // In related mode, we want to see Master items.
-  // We need to know if they are scanned.
   const scannedPartIds = useMemo(() => new Set(records.map(r => r.PartID)), [records]);
 
-  // Selection Logic
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) {
@@ -118,8 +115,6 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      
-      {/* Top Tab Switcher */}
       {!isSelectionMode && (
         <div className="flex p-1 bg-stone-200 rounded-xl">
           <button 
@@ -143,7 +138,6 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
         </div>
       )}
 
-      {/* Header / Search Bar */}
       {isSelectionMode ? (
         <div className="sticky top-0 bg-stone-800 text-stone-50 z-10 py-3 px-4 rounded-xl flex justify-between items-center shadow-md animate-in slide-in-from-top-2">
            <div className="flex items-center gap-3">
@@ -206,7 +200,6 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
         )
       )}
 
-      {/* Content Area */}
       <div className="flex-1 overflow-y-auto space-y-3 pb-20 no-scrollbar">
         
         {mode === 'HISTORY' && (
@@ -238,9 +231,9 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
              ) : (
                 <>
                   <div className="bg-stone-800 text-stone-50 p-4 rounded-xl shadow-md mb-4">
-                     <h4 className="text-[10px] text-stone-400 mb-1 uppercase tracking-wider">當前比對品項</h4>
-                     {/* Show Full Description */}
-                     <p className="font-bold text-sm leading-relaxed">{lastRecord.Description}</p>
+                     <h4 className="text-[10px] text-stone-400 mb-1 uppercase tracking-wider">當前比對關鍵字 (Description)</h4>
+                     {/* Show Search Key instead of raw description */}
+                     <p className="font-bold text-sm leading-relaxed">{searchKeyDisplay}</p>
                      <div className="flex justify-between items-end mt-2">
                         {relatedLoading ? (
                           <span className="text-xs">比對中...</span>
@@ -277,8 +270,6 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
                                     <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded-full shrink-0">未盤</span>
                                   )}
                                </div>
-                               {/* Removed Location display */}
-                               {/* Full Description without truncate */}
                                <div className="text-[10px] text-stone-600 mt-1 leading-relaxed">
                                  {item.Description}
                                </div>
@@ -294,7 +285,6 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
 
       </div>
 
-      {/* Pagination (Only for History) */}
       {mode === 'HISTORY' && totalPages > 1 && (
         <div className="flex justify-center items-center gap-4 py-2 text-xs text-stone-600">
           <button 
@@ -318,7 +308,6 @@ const HistoryList: React.FC<HistoryListProps> = ({ records, onDelete, onUpdateSt
   );
 };
 
-// Extracted Item component for gesture handling
 const HistoryItem = ({ record, isSelectionMode, isSelected, onToggle, onLongPress }: any) => {
   const timeoutRef = React.useRef<any>(null);
 
@@ -358,13 +347,12 @@ const HistoryItem = ({ record, isSelectionMode, isSelected, onToggle, onLongPres
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-             {/* Adjusted to text-base from text-lg */}
              <h3 className="font-mono font-bold text-stone-800 truncate text-base">{record.PartID}</h3>
              {record.Status === 'Not Found' && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full shrink-0">未建檔</span>}
              {record.Status === 'Duplicated' && <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full shrink-0">重複</span>}
              {record.Status === 'Checked' && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full shrink-0">已確認</span>}
           </div>
-          {/* Show Full Description, No Truncate, Removed Location */}
+          {/* Full Description, No Truncate, Removed Location */}
           <p className="text-stone-600 text-xs mt-1 leading-relaxed">{record.Description || '未知品項'}</p>
           <div className="flex gap-3 mt-1.5 text-[10px] text-stone-400">
             <span>{new Date(record.InventoryDate).toLocaleString()}</span>
