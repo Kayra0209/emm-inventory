@@ -61,55 +61,29 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       const qrCode = new Html5Qrcode(scannerRegionId);
       html5QrCodeRef.current = qrCode;
 
-      let cameraIdOrConfig: any = { facingMode: "environment" };
-      try {
-          const devices = await Html5Qrcode.getCameras();
-          if (devices && devices.length > 0) {
-              const backCamera = devices.find(d => 
-                  d.label.toLowerCase().includes('back') || 
-                  d.label.toLowerCase().includes('rear') || 
-                  d.label.toLowerCase().includes('environment')
-              );
-              if (backCamera) {
-                  cameraIdOrConfig = { deviceId: { exact: backCamera.id } };
-              } else {
-                  cameraIdOrConfig = { deviceId: { exact: devices[devices.length - 1].id } };
-              }
-          }
-      } catch (e) {
-          console.warn("Could not enumerate cameras", e);
-      }
+      // SIMPLIFIED CONFIGURATION:
+      // We removed complex camera selection and resolution constraints.
+      // Using purely `facingMode: "environment"` is the most robust way to get the 
+      // standard 1x Main Camera on mobile devices without OS-level digital cropping/zoom.
+      const cameraIdOrConfig = { facingMode: "environment" };
 
       const config = {
         fps: 10,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            // 60% box size usually feels comfortable for centering
             return {
-                width: Math.floor(minEdge * 0.7),
-                height: Math.floor(minEdge * 0.7)
+                width: Math.floor(minEdge * 0.6),
+                height: Math.floor(minEdge * 0.6)
             };
         },
         formatsToSupport: [ 
             Html5QrcodeSupportedFormats.QR_CODE, 
             Html5QrcodeSupportedFormats.CODE_128, 
             Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.CODE_39 // Added Code-39 support
+            Html5QrcodeSupportedFormats.CODE_39
         ]
       };
-
-      // Force 4:3 Aspect Ratio (1280x960) to prevent digital cropping/zoom
-      if (typeof cameraIdOrConfig !== 'string' && !cameraIdOrConfig.deviceId) {
-          cameraIdOrConfig = {
-              facingMode: "environment",
-              width: { ideal: 1280 }, 
-              height: { ideal: 960 } // 4:3 Aspect ratio
-          };
-      } else if (cameraIdOrConfig.deviceId) {
-          // Even if we have a device ID, try to impose constraints for aspect ratio
-          // Note: Html5Qrcode might not support passing constraints with deviceId directly in start(), 
-          // but we rely on the library to handle it or fallback.
-          // For stricter control, we might need to rely on the camera selection logic above.
-      }
 
       if (!isMountedRef.current || currentRequestId !== requestIdRef.current) return;
 
@@ -130,13 +104,22 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
         () => {}
       );
 
-      setIsInitializing(false);
-
+      // Try to enable torch button if supported
       if (isMountedRef.current) {
          try {
-           setHasTorch(true); 
-         } catch(e) {}
+            // Apply a harmless constraint to check if track supports advanced capabilities
+            const track = qrCode.getRunningTrackCameraCapabilities();
+            // @ts-ignore
+            if (track && track.torch) {
+                setHasTorch(true);
+            }
+         } catch(e) {
+             // Fallback: detection failed, but maybe torch works, hide button to be safe or show it?
+             // Safest to hide if we can't confirm.
+         }
       }
+
+      setIsInitializing(false);
 
     } catch (err: any) {
       console.error("Scanner Start Error", err);
@@ -202,7 +185,6 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
                     <span className="text-xs">啟動相機中...</span>
                 </div>
             )}
-            {/* Height needs to be 100% to fill flex parent */}
             <div id={scannerRegionId} className="w-full h-full" />
         </div>
         
@@ -248,7 +230,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4/5 p-4 bg-red-900/90 text-white rounded-xl text-center backdrop-blur-sm animate-in fade-in flex flex-col items-center gap-3 z-50 shadow-2xl border border-red-700">
            <div>
              <p className="font-bold mb-2 text-lg">相機啟動失敗</p>
-             <p className="text-xs whitespace-pre-line leading-relaxed opacity-90 text-left bg-black/20 p-2 rounded">{cameraError}</p>
+             <p className="text-xs whitespace-pre-line leading-relaxed opacity-90 text-left bg-black/20 p-2 rounded max-h-40 overflow-y-auto">{cameraError}</p>
            </div>
            <button 
              onClick={handleRetry}
