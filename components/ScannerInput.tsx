@@ -63,9 +63,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
       html5QrCodeRef.current = qrCode;
 
       // --- CONFIGURATION ---
-      // 1. Resolution: Requesting 1920 (FHD) width provides more pixels per bar for dense 1D barcodes.
-      // 2. Aspect Ratio: Flexible height allows OS to pick best sensor mode (usually 4:3).
-      // 3. Focus: Request continuous focus.
+      // Requesting High Resolution 4:3 to support both wide angle and detailed 1D barcodes
       const cameraIdOrConfig = {
           facingMode: "environment",
           width: { min: 1280, ideal: 1920, max: 3840 },
@@ -75,7 +73,7 @@ const ScannerInput: React.FC<ScannerInputProps> = ({ onScan, isScanning, setIsSc
 
       const config = {
         fps: 15, 
-        // 4. Scan Box: Increased to 90% to allow long Code-39 barcodes to fit
+        // 90% scan box to fit long barcodes
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
             return {
